@@ -125,7 +125,7 @@ class TestAccountService(TestCase):
 
     # ADD YOUR TEST CASES HERE ...
 
-    def test_read_an_account(self):
+    def test_get_account(self):
         """ It should read a single account """
         account = self.create_accounts(1)[0]
         resp = self.client.get(

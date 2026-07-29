@@ -66,13 +66,13 @@ spec:
     - name: database_uri
       description: Database connection string
       type: string
-      default: "sqlite://test.db"
+      default: "sqlite:///test.db"
   steps:
     - name: nosetests
       image: "python:3.9-slim"
       workingDir: $(workspaces.source.path)
       env:
-        - name: database_uri
+        - name: DATABSE_URI
           value: $(params.database_uri)
       script: |
         #!/bin/bash

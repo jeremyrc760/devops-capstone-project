@@ -45,7 +45,7 @@ spec:
                   key: database-password
       containers:
         - name: accounts
-          image: ghcr.io/jeremyrc760/devops-capstone-project:main
+          image: ghcr.io/jeremyrc760/devops-capstone-project:aws-kubeadm-gitops
           imagePullPolicy: Always
           ports:
             - name: http

@@ -9,7 +9,7 @@ It intentionally does not commit a real Kubernetes Secret. Create the database S
 The app Deployment expects this image tag by default:
 
 ```text
-ghcr.io/jeremyrc760/devops-capstone-project:main
+ghcr.io/jeremyrc760/devops-capstone-project:aws-kubeadm-gitops
 ```
 
 The `.github/workflows/docker-ghcr.yaml` workflow builds and pushes the image to GHCR on pushes to `main` and `aws-kubeadm-gitops`.

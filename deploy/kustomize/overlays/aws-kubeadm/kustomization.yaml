@@ -3,3 +3,11 @@ kind: Kustomization
 
 resources:
   - ../../base
+
+patches:
+  - target:
+      version: v1
+      kind: Service
+      name: accounts
+      namespace: accounts
+    path: accounts-service-clusterip-patch.yaml

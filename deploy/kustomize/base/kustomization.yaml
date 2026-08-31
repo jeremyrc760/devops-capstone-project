@@ -8,3 +8,4 @@ resources:
   - postgres-service.yaml
   - accounts-deployment.yaml
   - accounts-service.yaml
+  - postgres-sealedsecret.yaml

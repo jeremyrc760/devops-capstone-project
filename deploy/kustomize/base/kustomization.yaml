@@ -9,3 +9,4 @@ resources:
   - accounts-deployment.yaml
   - accounts-service.yaml
   - postgres-sealedsecret.yaml
+  - accounts-ingress.yaml

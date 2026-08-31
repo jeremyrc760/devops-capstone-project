@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounts
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/part-of: devops-capstone
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: accounts
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: accounts
+        app.kubernetes.io/part-of: devops-capstone
+    spec:
+      initContainers:
+        - name: wait-for-postgresql
+          image: postgres:16-alpine
+          command:
+            - /bin/sh
+            - -c
+            - until pg_isready -h "$DATABASE_HOST" -U "$DATABASE_USER" -d "$DATABASE_NAME"; do echo waiting for postgresql; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: accounts-config
+          env:
+            - name: DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-name
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-user
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-password
+      containers:
+        - name: accounts
+          image: ghcr.io/jeremyrc760/devops-capstone-project:aws-kubeadm-gitops
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: accounts-config
+          env:
+            - name: DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-name
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-user
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-password
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20

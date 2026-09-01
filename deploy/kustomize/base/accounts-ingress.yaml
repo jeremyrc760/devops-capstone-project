@@ -9,7 +9,8 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - http:
+    - host: customer-account.api.JeremyCloudLabs.com
+      http:
         paths:
           - path: /
             pathType: Prefix

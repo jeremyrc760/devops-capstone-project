@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/part-of: devops-capstone
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-http01
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   ingressClassName: nginx
   tls:

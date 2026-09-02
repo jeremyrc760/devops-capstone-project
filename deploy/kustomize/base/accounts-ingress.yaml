@@ -6,8 +6,14 @@ metadata:
   labels:
     app.kubernetes.io/name: accounts
     app.kubernetes.io/part-of: devops-capstone
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-http01
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - customer-account.api.jeremycloudlabs.com
+      secretName: accounts-tls
   rules:
     - host: customer-account.api.jeremycloudlabs.com
       http:

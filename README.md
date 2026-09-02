@@ -1,137 +1,392 @@
-# devops-capstone-project
+# DevOps Capstone Project: Account Service on Self-Managed Kubernetes
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python 3.9](https://img.shields.io/badge/Python-3.9-green.svg)](https://shields.io/)
+This repository contains a Flask-based Account REST API service and the deployment assets used to run it on a self-managed Kubernetes cluster on AWS EC2.
 
-This repository contains the starter code for the project in [**IBM-CD0285EN-SkillsNetwork DevOps Capstone Project**](https://www.coursera.org/learn/devops-capstone-project?specialization=devops-and-software-engineering) which is part of the [**IBM DevOps and Software Engineering Professional Certificate**](https://www.coursera.org/professional-certificates/devops-and-software-engineering)
+The project originally came from an IBM Cloud Kubernetes capstone lab. I extended it into an AWS-based DevOps portfolio project using Docker, GitHub Actions, GitHub Container Registry, kubeadm Kubernetes, Kustomize, Argo CD, Sealed Secrets, NGINX Ingress, Route 53, and HTTPS certificates from Let's Encrypt.
 
-# ACCOUNT Service
+## Project Summary
 
-![Build Status](https://github.com/jeremyrc760/devops-capstone-project/actions/workflows/ci-build.yaml/badge.svg)
+The application is a small account management API. It exposes REST endpoints for creating, reading, updating, deleting, and listing customer account records.
 
-## Usage
-
-You should use this template to start your DevOps Capstone project. It contains all of the code that you will need to get started.
-
-Do Not fork this code! It is meant to be used by pressing the  <span style=color:white;background:green>**Use this Template**</span> button in GitHub. This will copy the code to your own repository with no connection back to the original repository like a fork would. This is what you want.
-
-## Development Environment
-
-These labs are designed to be executed in the IBM Developer Skills Network Cloud IDE with OpenShift. Please use the links provided in the Coursera Capstone project to access the lab environment.
-
-Once you are in the lab environment, you can initialize it with `bin/setup.sh` by sourcing it. (*Note: DO NOT run this program as a bash script. It sets environment variable and so must be sourced*):
-
-```bash
-source bin/setup.sh
-```
-
-This will install Python 3.9, make it the default, modify the bash prompt, create a Python virtual environment and activate it.
-
-After sourcing it you prompt should look like this:
-
-```bash
-(venv) theia:project$
-```
-
-## Useful commands
-
-Under normal circumstances you should not have to run these commands. They are performed automatically at setup but may be useful when things go wrong:
-
-### Activate the Python 3.9 virtual environment
-
-You can activate the Python 3.9 environment with:
-
-```bash
-source ~/venv/bin/activate
-```
-
-### Installing Python dependencies
-
-These dependencies are installed as part of the setup process but should you need to install them again, first make sure that the Python 3.9 virtual environment is activated and then use the `make install` command:
-
-```bash
-make install
-```
-
-### Starting the Postgres Docker container
-
-The labs use Postgres running in a Docker container. If for some reason the service is not available you can start it with:
-
-```bash
-make db
-```
-
-You can use the `docker ps` command to make sure that postgres is up and running.
-
-## Project layout
-
-The code for the microservice is contained in the `service` package. All of the test are in the `tests` folder. The code follows the **Model-View-Controller** pattern with all of the database code and business logic in the model (`models.py`), and all of the RESTful routing on the controller (`routes.py`).
+Current production-style access path:
 
 ```text
-├── service         <- microservice package
-│   ├── common/     <- common log and error handlers
-│   ├── config.py   <- Flask configuration object
-│   ├── models.py   <- code for the persistent model
-│   └── routes.py   <- code for the REST API routes
-├── setup.cfg       <- tools setup config
-└── tests                       <- folder for all of the tests
-    ├── factories.py            <- test factories
-    ├── test_cli_commands.py    <- CLI tests
-    ├── test_models.py          <- model unit tests
-    └── test_routes.py          <- route unit tests
+https://customer-account.api.jeremycloudlabs.com/health
 ```
 
-## Data Model
+Example health response:
 
-The Account model contains the following fields:
+```json
+{"status":"OK"}
+```
 
-| Name | Type | Optional |
-|------|------|----------|
-| id | Integer| False |
-| name | String(64) | False |
-| email | String(64) | False |
-| address | String(256) | False |
-| phone_number | String(32) | True |
-| date_joined | Date | False |
+Example root response:
 
-## Your Task
+```json
+{"name":"Account REST API Service","version":"1.0"}
+```
 
-Complete this microservice by implementing REST API's for `READ`, `UPDATE`, `DELETE`, and `LIST` while maintaining **95%** code coverage. In true **Test Driven Development** fashion, first write tests for the code you "wish you had", and then write the code to make them pass.
+## Application Layer
 
-## Local Kubernetes Development
+The application is implemented as a Python Flask service.
 
-This repo can also be used for local Kubernetes development. It is not advised that you run these commands in the Cloud IDE environment. The purpose of these commands are to simulate the Cloud IDE environment locally on your computer. 
+Main components:
 
-At a minimum, you will need [Docker Desktop](https://www.docker.com/products/docker-desktop) installed on your computer. For the full development environment, you will also need [Visual Studio Code](https://code.visualstudio.com) with the [Remote Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension from the Visual Studio Marketplace. All of these can be installed manually by clicking on the links above or you can use a package manager like **Homebrew** on Mac of **Chocolatey** on Windows.
+| Path | Purpose |
+| --- | --- |
+| `service/routes.py` | Defines REST API routes such as `/`, `/health`, and `/accounts` |
+| `service/models.py` | Defines the `Account` SQLAlchemy model and database CRUD behavior |
+| `service/config.py` | Builds the database connection configuration from environment variables |
+| `service/__init__.py` | Creates and initializes the Flask application |
+| `service/common/` | Shared helpers for status codes, logging, CLI commands, and error handling |
+| `tests/` | Unit and service tests for the API |
 
-Please only use these commands for working stand-alone on your own computer with the VSCode Remote Container environment provided.
+Core API endpoints:
 
-1. Bring up a local K3D Kubernetes cluster
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | Service information |
+| `GET` | `/health` | Health check endpoint |
+| `GET` | `/accounts` | List accounts |
+| `POST` | `/accounts` | Create an account |
+| `GET` | `/accounts/{id}` | Get one account |
+| `PUT` | `/accounts/{id}` | Update one account |
+| `DELETE` | `/accounts/{id}` | Delete one account |
 
-    ```bash
-    $ make cluster
-    ```
+The data model includes:
 
-2. Install Tekton
+| Field | Meaning |
+| --- | --- |
+| `id` | Account ID |
+| `name` | Customer name |
+| `email` | Customer email |
+| `address` | Customer address |
+| `phone_number` | Customer phone number |
+| `date_joined` | Date the customer joined |
 
-    ```bash
-    $ make tekton
-    ```
+## Container Build Layer
 
-3. Install the ClusterTasks that the Cloud IDE has
+The application is packaged as a Docker image.
 
-    ```bash
-    $ make clustertasks
-    ```
+| File | Purpose |
+| --- | --- |
+| `Dockerfile` | Builds the Flask app image using `python:3.9-slim` |
+| `requirements.txt` | Python runtime and test dependencies |
+| `gunicorn.conf.py` | Gunicorn server configuration |
 
-You can now perform Tekton development locally, just like in the Cloud IDE lab environment.
+Runtime behavior:
 
-## Author
+```text
+Gunicorn starts the Flask app on port 8080 inside the container.
+```
 
-[John Rofrano](https://www.coursera.org/instructor/johnrofrano), Senior Technical Staff Member, DevOps Champion, @ IBM Research, and Instructor @ Coursera
+Current image registry:
+
+```text
+ghcr.io/jeremyrc760/devops-capstone-project
+```
+
+## CI/CD Layer
+
+This project uses GitHub Actions for CI and image publishing.
+
+| Workflow | Purpose |
+| --- | --- |
+| `.github/workflows/ci-build.yaml` | Runs linting and tests with PostgreSQL service container |
+| `.github/workflows/docker-ghcr.yaml` | Builds and pushes Docker images to GitHub Container Registry |
+
+The container image is tagged from branch and commit metadata. The AWS kubeadm GitOps deployment currently uses the image from the `aws-kubeadm-gitops` branch.
+
+## Kubernetes Infrastructure
+
+The Kubernetes cluster is self-managed on AWS EC2 using `kubeadm`.
+
+Current cluster shape:
+
+| Node | Role | Purpose |
+| --- | --- | --- |
+| `k8s-control-plane-1` | Control plane | Runs Kubernetes API server, scheduler, controller manager, and etcd |
+| `k8s-worker-1` | Worker | Runs application and platform pods |
+| `k8s-worker-2` | Worker | Runs application and platform pods |
+
+Installed cluster components:
+
+| Component | Purpose |
+| --- | --- |
+| kubeadm | Bootstraps the Kubernetes control plane and worker nodes |
+| kubelet | Node agent that runs pods |
+| kubectl | Kubernetes CLI |
+| containerd | Container runtime |
+| Calico | Pod networking / CNI |
+| NGINX Ingress Controller | HTTP/HTTPS ingress entry point inside the cluster |
+| Argo CD | GitOps controller and UI |
+| Sealed Secrets | Git-safe encrypted Kubernetes secrets |
+| cert-manager | Automated TLS certificate management |
+
+## AWS Infrastructure
+
+The self-managed Kubernetes cluster runs inside a dedicated AWS VPC.
+
+| AWS Resource | Purpose |
+| --- | --- |
+| VPC | Isolated network for the Kubernetes lab |
+| Public subnet | Subnet where EC2 Kubernetes nodes run |
+| Internet Gateway | Allows public internet traffic in and out of the VPC |
+| Route Table | Routes `0.0.0.0/0` to the Internet Gateway and VPC CIDR locally |
+| Security Groups | Controls SSH, NodePort, HTTP, and HTTPS access |
+| EC2 instances | One control plane and two worker nodes |
+| Network Load Balancer | Stable public entry point for HTTP/HTTPS traffic |
+| Route 53 | DNS record for the API domain |
+
+## External Traffic Architecture
+
+The external request path is:
+
+```mermaid
+flowchart TB
+    client[Client / Browser / curl]
+    dns[Route 53 DNS<br/>customer-account.api.jeremycloudlabs.com]
+    nlb[AWS Network Load Balancer<br/>TCP 80 and TCP 443]
+
+    subgraph aws[AWS VPC]
+        worker1[Worker Node 1<br/>NodePort 31732 / 32086]
+        worker2[Worker Node 2<br/>NodePort 31732 / 32086]
+    end
+
+    subgraph k8s[Kubernetes Cluster]
+        ingressController[NGINX Ingress Controller<br/>namespace: ingress-nginx]
+        ingress[Ingress: accounts<br/>host + TLS routing rule]
+        accountSvc[Service: accounts<br/>ClusterIP :8080]
+        accountPods[Account API Pods<br/>Flask + Gunicorn]
+        postgresSvc[Service: postgresql<br/>ClusterIP :5432]
+        postgresPod[PostgreSQL Pod]
+    end
+
+    client --> dns
+    dns --> nlb
+    nlb --> worker1
+    nlb --> worker2
+    worker1 --> ingressController
+    worker2 --> ingressController
+    ingressController --> ingress
+    ingress --> accountSvc
+    accountSvc --> accountPods
+    accountPods --> postgresSvc
+    postgresSvc --> postgresPod
+```
+
+Important detail: the NGINX Ingress Controller runs as Kubernetes pods on worker nodes. The AWS NLB targets the worker nodes' NodePort ports, then the Ingress Controller reads the Kubernetes Ingress rule and forwards traffic to the correct internal service.
+
+## GitOps Architecture
+
+Argo CD watches this repository and applies the Kubernetes manifests from the GitOps branch.
+
+Current Argo CD source:
+
+| Field | Value |
+| --- | --- |
+| Repository | `https://github.com/jeremyrc760/devops-capstone-project` |
+| Branch | `aws-kubeadm-gitops` |
+| Path | `deploy/kustomize/overlays/aws-kubeadm` |
+| Destination | In-cluster Kubernetes API |
+| Namespace | `accounts` |
+
+GitOps flow:
+
+```mermaid
+flowchart LR
+    dev[Developer changes YAML or app code]
+    repo[GitHub Repo<br/>aws-kubeadm-gitops branch]
+    actions[GitHub Actions<br/>test + image build]
+    ghcr[GitHub Container Registry<br/>application image]
+    argocd[Argo CD<br/>watches repo path]
+    kubeapi[Kubernetes API Server]
+    workloads[Kubernetes Resources<br/>Deployments, Services, Ingress, Secrets]
+
+    dev --> repo
+    repo --> actions
+    actions --> ghcr
+    repo --> argocd
+    argocd --> kubeapi
+    kubeapi --> workloads
+    ghcr --> workloads
+```
+
+## Kubernetes Manifests
+
+The deployment manifests are organized in two styles.
+
+### Earlier AWS kubeadm Manifests
+
+```text
+deploy/aws-kubeadm/
+```
+
+This directory documents the earlier manual deployment approach. It is useful as a learning record of how the app was first deployed to the self-managed cluster.
+
+### Kustomize GitOps Manifests
+
+```text
+deploy/kustomize/
+```
+
+This is the current GitOps deployment structure.
+
+| Path | Purpose |
+| --- | --- |
+| `deploy/kustomize/base/` | Shared Kubernetes resources |
+| `deploy/kustomize/overlays/aws-kubeadm/` | Current AWS kubeadm cluster deployment |
+| `deploy/kustomize/overlays/dev/` | Development-style overlay |
+| `deploy/kustomize/overlays/prod/` | Production-style overlay |
+
+Current base resources:
+
+| Resource | Purpose |
+| --- | --- |
+| `Namespace` | Creates the `accounts` namespace |
+| `ConfigMap` | Stores non-sensitive app configuration such as `DATABASE_HOST` |
+| `SealedSecret` | Stores encrypted PostgreSQL credentials safely in Git |
+| `Deployment/accounts` | Runs the Account API pods |
+| `Service/accounts` | Internal service for the Account API |
+| `Deployment/postgresql` | Runs PostgreSQL for the lab environment |
+| `Service/postgresql` | Internal database service |
+| `Ingress/accounts` | Routes public HTTP/HTTPS traffic to the Account API |
+
+## Secrets Management
+
+The PostgreSQL credentials are managed with Bitnami Sealed Secrets.
+
+Why this matters:
+
+```text
+A normal Kubernetes Secret is only base64 encoded, not encrypted.
+A SealedSecret is encrypted for this specific cluster and can be committed to Git safely.
+The Sealed Secrets controller decrypts it inside the cluster and creates the real Secret.
+```
+
+Current secret flow:
+
+```mermaid
+flowchart LR
+    plain[Plain Kubernetes Secret<br/>created locally only]
+    kubeseal[kubeseal CLI<br/>encrypts with cluster public cert]
+    sealed[SealedSecret YAML<br/>safe to commit]
+    repo[GitHub Repo]
+    controller[Sealed Secrets Controller<br/>inside Kubernetes]
+    secret[Kubernetes Secret<br/>used by Pods]
+
+    plain --> kubeseal
+    kubeseal --> sealed
+    sealed --> repo
+    repo --> controller
+    controller --> secret
+```
+
+The public certificate is stored under:
+
+```text
+deploy/sealed-secrets/sealed-secrets-public-cert.pem
+```
+
+This certificate is public by design. The private key remains inside the Kubernetes cluster.
+
+## HTTPS and TLS
+
+HTTPS is provided by cert-manager and Let's Encrypt.
+
+| Component | Purpose |
+| --- | --- |
+| `ClusterIssuer` | Tells cert-manager how to request certificates from Let's Encrypt |
+| HTTP-01 challenge | Lets Let's Encrypt verify domain ownership over HTTP |
+| `Certificate` | Represents the requested TLS certificate |
+| `accounts-tls` Secret | Stores the final TLS certificate and private key inside Kubernetes |
+| Ingress TLS config | Uses the certificate for HTTPS traffic |
+
+Current HTTPS result:
+
+```text
+https://customer-account.api.jeremycloudlabs.com/health
+```
+
+Expected response:
+
+```json
+{"status":"OK"}
+```
+
+HTTP currently redirects to HTTPS using the NGINX Ingress annotation:
+
+```text
+nginx.ingress.kubernetes.io/ssl-redirect: "true"
+```
+
+## Useful Commands
+
+Check application health through the public domain:
+
+```bash
+curl https://customer-account.api.jeremycloudlabs.com/health
+```
+
+Check all resources in the application namespace:
+
+```bash
+kubectl get all -n accounts
+```
+
+Check the Ingress resource:
+
+```bash
+kubectl get ingress -n accounts
+```
+
+Check the TLS certificate:
+
+```bash
+kubectl get certificate -n accounts
+```
+
+Check Argo CD application status:
+
+```bash
+kubectl get application accounts -n argocd
+```
+
+Render the current AWS kubeadm Kustomize overlay locally:
+
+```bash
+kubectl kustomize deploy/kustomize/overlays/aws-kubeadm
+```
+
+## Current Status
+
+The project currently demonstrates:
+
+- A Python Flask REST API containerized with Docker
+- GitHub Actions CI and container image publishing to GHCR
+- A self-managed Kubernetes cluster on AWS EC2
+- Calico networking across one control plane and two worker nodes
+- Argo CD GitOps deployment from a dedicated branch and Kustomize overlay
+- PostgreSQL running inside Kubernetes for the lab environment
+- Sealed Secrets for encrypted Git-based secret management
+- NGINX Ingress Controller for HTTP/HTTPS routing
+- AWS Network Load Balancer as the public entry point
+- Route 53 custom domain integration
+- cert-manager and Let's Encrypt HTTPS certificate automation
+
+## Future Improvements
+
+Potential next steps:
+
+- Move PostgreSQL from in-cluster `Deployment` to AWS RDS PostgreSQL
+- Add persistent storage for the in-cluster PostgreSQL demo
+- Manage AWS infrastructure with Terraform
+- Use ExternalDNS to manage Route 53 records from Kubernetes
+- Add Prometheus and Grafana monitoring
+- Add structured application logs and centralized log collection
+- Add a frontend client for the Account API
+- Add production and development Argo CD Applications using separate overlays
 
 ## License
 
-Licensed under the Apache License. See [LICENSE](LICENSE)
-
-## <h3 align="center"> © IBM Corporation 2022. All rights reserved. <h3/>
+This project is based on the IBM Developer Skills Network capstone starter project and keeps the original Apache License 2.0 license.

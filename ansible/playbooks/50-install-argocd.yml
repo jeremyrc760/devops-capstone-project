@@ -1,0 +1,7 @@
+---
+- name: Install Argo CD
+  hosts: control_plane
+  become: true
+  gather_facts: true
+  roles:
+    - argocd

@@ -1,0 +1,73 @@
+---
+- name: Assert exactly one control plane host is configured
+  ansible.builtin.assert:
+    that:
+      - groups["control_plane"] | length == 1
+    fail_msg: "Expected exactly one host in the control_plane inventory group."
+  run_once: true
+
+- name: Check admin kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ sealed_secrets_kubeconfig }}"
+  register: sealed_secrets_admin_conf
+
+- name: Validate control plane is initialized
+  ansible.builtin.assert:
+    that:
+      - sealed_secrets_admin_conf.stat.exists
+      - sealed_secrets_admin_conf.stat.isreg
+    fail_msg: "Control plane is not initialized yet. Run playbooks/20-init-control-plane.yml before playbooks/60-install-sealed-secrets.yml."
+
+- name: Check kubectl can read cluster nodes
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ sealed_secrets_kubeconfig }}"
+      - get
+      - nodes
+      - --no-headers
+  changed_when: false
+
+- name: Apply Sealed Secrets controller manifest
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ sealed_secrets_kubeconfig }}"
+      - apply
+      - -f
+      - "{{ sealed_secrets_manifest_url }}"
+  register: sealed_secrets_manifest_apply
+  changed_when: >
+    'created' in sealed_secrets_manifest_apply.stdout
+    or 'configured' in sealed_secrets_manifest_apply.stdout
+
+- name: Wait for Sealed Secrets controller rollout
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ sealed_secrets_kubeconfig }}"
+      - -n
+      - "{{ sealed_secrets_namespace }}"
+      - rollout
+      - status
+      - "deployment/{{ sealed_secrets_controller_name }}"
+      - "--timeout={{ sealed_secrets_wait_timeout }}"
+  changed_when: false
+
+- name: Verify Sealed Secrets CRD exists
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ sealed_secrets_kubeconfig }}"
+      - get
+      - crd
+      - "{{ sealed_secrets_crd_name }}"
+  changed_when: false
+
+- name: Report Sealed Secrets installation state
+  ansible.builtin.debug:
+    msg:
+      - "Sealed Secrets controller: {{ sealed_secrets_controller_name }}"
+      - "Sealed Secrets namespace: {{ sealed_secrets_namespace }}"
+      - "Sealed Secrets manifest: {{ sealed_secrets_manifest_url }}"
+      - "This role installs the controller only. Application SealedSecret resources should stay in the GitOps manifests."

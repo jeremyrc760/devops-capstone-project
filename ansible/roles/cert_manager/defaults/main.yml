@@ -1,0 +1,27 @@
+---
+cert_manager_version: v1.18.2
+cert_manager_namespace: cert-manager
+cert_manager_manifest_url: "https://github.com/cert-manager/cert-manager/releases/download/{{ cert_manager_version }}/cert-manager.yaml"
+
+cert_manager_kubeconfig: /etc/kubernetes/admin.conf
+cert_manager_wait_timeout: 300s
+
+cert_manager_crds:
+  - certificates.cert-manager.io
+  - certificaterequests.cert-manager.io
+  - challenges.acme.cert-manager.io
+  - clusterissuers.cert-manager.io
+  - issuers.cert-manager.io
+  - orders.acme.cert-manager.io
+
+cert_manager_rollout_workloads:
+  - deployment/cert-manager
+  - deployment/cert-manager-cainjector
+  - deployment/cert-manager-webhook
+
+cert_manager_create_cluster_issuer: true
+cert_manager_cluster_issuer_name: letsencrypt-http01
+cert_manager_acme_email: ""
+cert_manager_acme_server: https://acme-v02.api.letsencrypt.org/directory
+cert_manager_private_key_secret_name: letsencrypt-http01-account-key
+cert_manager_http01_ingress_class: nginx

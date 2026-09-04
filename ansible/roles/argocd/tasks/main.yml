@@ -1,0 +1,84 @@
+---
+- name: Assert exactly one control plane host is configured
+  ansible.builtin.assert:
+    that:
+      - groups["control_plane"] | length == 1
+    fail_msg: "Expected exactly one host in the control_plane inventory group."
+  run_once: true
+
+- name: Check admin kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ argocd_kubeconfig }}"
+  register: argocd_admin_conf
+
+- name: Validate control plane is initialized
+  ansible.builtin.assert:
+    that:
+      - argocd_admin_conf.stat.exists
+      - argocd_admin_conf.stat.isreg
+    fail_msg: "Control plane is not initialized yet. Run playbooks/20-init-control-plane.yml before playbooks/50-install-argocd.yml."
+
+- name: Check kubectl can read cluster nodes
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ argocd_kubeconfig }}"
+      - get
+      - nodes
+      - --no-headers
+  changed_when: false
+
+- name: Apply Argo CD namespace
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ argocd_kubeconfig }}"
+      - apply
+      - -f
+      - -
+    stdin: |
+      ---
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: {{ argocd_namespace }}
+  register: argocd_namespace_apply
+  changed_when: >
+    'created' in argocd_namespace_apply.stdout
+    or 'configured' in argocd_namespace_apply.stdout
+
+- name: Apply Argo CD install manifest
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ argocd_kubeconfig }}"
+      - -n
+      - "{{ argocd_namespace }}"
+      - apply
+      - -f
+      - "{{ argocd_install_manifest_url }}"
+  register: argocd_manifest_apply
+  changed_when: >
+    'created' in argocd_manifest_apply.stdout
+    or 'configured' in argocd_manifest_apply.stdout
+
+- name: Wait for Argo CD workloads
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ argocd_kubeconfig }}"
+      - -n
+      - "{{ argocd_namespace }}"
+      - rollout
+      - status
+      - "{{ item }}"
+      - "--timeout={{ argocd_wait_timeout }}"
+  changed_when: false
+  loop: "{{ argocd_rollout_workloads }}"
+
+- name: Report Argo CD installation state
+  ansible.builtin.debug:
+    msg:
+      - "Argo CD namespace: {{ argocd_namespace }}"
+      - "Argo CD manifest: {{ argocd_install_manifest_url }}"
+      - "Initial admin password can be retrieved with kubectl from the argocd-initial-admin-secret secret if it still exists."

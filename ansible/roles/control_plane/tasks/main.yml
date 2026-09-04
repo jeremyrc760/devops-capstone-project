@@ -1,0 +1,122 @@
+---
+- name: Assert exactly one control plane host is configured
+  ansible.builtin.assert:
+    that:
+      - groups["control_plane"] | length == 1
+    fail_msg: "Expected exactly one host in the control_plane inventory group."
+  run_once: true
+
+- name: Check kubeadm binary
+  ansible.builtin.stat:
+    path: /usr/bin/kubeadm
+  register: kubeadm_binary
+
+- name: Check kubelet binary
+  ansible.builtin.stat:
+    path: /usr/bin/kubelet
+  register: kubelet_binary
+
+- name: Check containerd service state
+  ansible.builtin.command: systemctl is-active containerd
+  register: containerd_service_state
+  changed_when: false
+  failed_when: false
+
+- name: Check swap state
+  ansible.builtin.command: swapon --show --noheadings
+  register: swap_state
+  changed_when: false
+  failed_when: false
+
+- name: Validate control plane prerequisites
+  ansible.builtin.assert:
+    that:
+      - kubeadm_binary.stat.exists
+      - kubelet_binary.stat.exists
+      - containerd_service_state.stdout == "active"
+      - swap_state.stdout == ""
+      - kubeadm_apiserver_advertise_address | length > 0
+      - kubeadm_pod_network_cidr | length > 0
+    fail_msg: "Control plane prerequisites are not satisfied. Run bootstrap/common package setup before kubeadm init."
+
+- name: Check whether the control plane is already initialized
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: kubeadm_admin_conf
+
+- name: Report existing control plane state
+  ansible.builtin.debug:
+    msg: "Control plane already initialized; kubeadm init will be skipped."
+  when: kubeadm_admin_conf.stat.exists
+
+- name: Initialize Kubernetes control plane with kubeadm
+  ansible.builtin.command:
+    argv:
+      - kubeadm
+      - init
+      - "--apiserver-advertise-address={{ kubeadm_apiserver_advertise_address }}"
+      - "--pod-network-cidr={{ kubeadm_pod_network_cidr }}"
+    creates: /etc/kubernetes/admin.conf
+  register: kubeadm_init_result
+  changed_when: true
+  no_log: true
+  when: not kubeadm_admin_conf.stat.exists
+
+- name: Ensure kubeconfig directory exists for SSH user
+  ansible.builtin.file:
+    path: "{{ control_plane_kubeconfig_home }}/.kube"
+    state: directory
+    owner: "{{ control_plane_kubeconfig_owner }}"
+    group: "{{ control_plane_kubeconfig_owner }}"
+    mode: "0700"
+
+- name: Install admin kubeconfig for SSH user
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "{{ control_plane_kubeconfig_home }}/.kube/config"
+    remote_src: true
+    owner: "{{ control_plane_kubeconfig_owner }}"
+    group: "{{ control_plane_kubeconfig_owner }}"
+    mode: "0600"
+
+- name: Ensure root-only kubeadm output directory exists
+  ansible.builtin.file:
+    path: "{{ control_plane_join_command_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Check whether worker join command is already stored
+  ansible.builtin.stat:
+    path: "{{ control_plane_join_command_path }}"
+  register: worker_join_command_file
+
+- name: Generate worker join command for later worker phase
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: worker_join_command
+  changed_when: true
+  no_log: true
+  when: >
+    not worker_join_command_file.stat.exists
+    or control_plane_refresh_join_command | bool
+    or (kubeadm_init_result is defined and kubeadm_init_result.changed | default(false))
+
+- name: Store worker join command with root-only permissions
+  ansible.builtin.copy:
+    dest: "{{ control_plane_join_command_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      {{ worker_join_command.stdout }}
+  no_log: true
+  when: worker_join_command is defined and worker_join_command.stdout is defined
+
+- name: Report control plane output locations
+  ansible.builtin.debug:
+    msg:
+      - "Admin kubeconfig: {{ control_plane_kubeconfig_home }}/.kube/config"
+      - "Worker join command: {{ control_plane_join_command_path }} root-only, for the later join-workers phase"

@@ -1,0 +1,125 @@
+---
+- name: Assert exactly one control plane host is configured
+  ansible.builtin.assert:
+    that:
+      - groups["control_plane"] | length == 1
+    fail_msg: "Expected exactly one host in the control_plane inventory group."
+  run_once: true
+
+- name: Validate configured NodePort values
+  ansible.builtin.assert:
+    that:
+      - nginx_ingress_http_node_port | int >= 30000
+      - nginx_ingress_http_node_port | int <= 32767
+      - nginx_ingress_https_node_port | int >= 30000
+      - nginx_ingress_https_node_port | int <= 32767
+      - nginx_ingress_http_node_port | int != nginx_ingress_https_node_port | int
+    fail_msg: "NGINX Ingress NodePorts must be unique values in the Kubernetes NodePort range 30000-32767."
+  when: nginx_ingress_patch_nodeports | bool
+
+- name: Check admin kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ nginx_ingress_kubeconfig }}"
+  register: nginx_ingress_admin_conf
+
+- name: Validate control plane is initialized
+  ansible.builtin.assert:
+    that:
+      - nginx_ingress_admin_conf.stat.exists
+      - nginx_ingress_admin_conf.stat.isreg
+    fail_msg: "Control plane is not initialized yet. Run playbooks/20-init-control-plane.yml before playbooks/80-install-nginx-ingress.yml."
+
+- name: Check kubectl can read cluster nodes
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ nginx_ingress_kubeconfig }}"
+      - get
+      - nodes
+      - --no-headers
+  changed_when: false
+
+- name: Apply NGINX Ingress Controller bare-metal manifest
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ nginx_ingress_kubeconfig }}"
+      - apply
+      - -f
+      - "{{ nginx_ingress_manifest_url }}"
+  register: nginx_ingress_manifest_apply
+  changed_when: >
+    'created' in nginx_ingress_manifest_apply.stdout
+    or 'configured' in nginx_ingress_manifest_apply.stdout
+
+- name: Wait for NGINX Ingress Controller rollout
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ nginx_ingress_kubeconfig }}"
+      - -n
+      - "{{ nginx_ingress_namespace }}"
+      - rollout
+      - status
+      - "deployment/{{ nginx_ingress_controller_name }}"
+      - "--timeout={{ nginx_ingress_wait_timeout }}"
+  changed_when: false
+
+- name: Read current NGINX Ingress Controller service NodePorts
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ nginx_ingress_kubeconfig }}"
+      - -n
+      - "{{ nginx_ingress_namespace }}"
+      - get
+      - service
+      - "{{ nginx_ingress_controller_name }}"
+      - -o
+      - "jsonpath={range .spec.ports[*]}{.name}:{.nodePort}{'\\n'}{end}"
+  register: nginx_ingress_service_nodeports
+  changed_when: false
+  when: nginx_ingress_patch_nodeports | bool
+
+- name: Pin NGINX Ingress Controller NodePorts for the AWS NLB
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ nginx_ingress_kubeconfig }}"
+      - -n
+      - "{{ nginx_ingress_namespace }}"
+      - patch
+      - service
+      - "{{ nginx_ingress_controller_name }}"
+      - --type=merge
+      - -p
+      - '{"spec":{"type":"NodePort","ports":[{"name":"http","port":80,"protocol":"TCP","targetPort":"http","nodePort":{{ nginx_ingress_http_node_port }}},{"name":"https","port":443,"protocol":"TCP","targetPort":"https","nodePort":{{ nginx_ingress_https_node_port }}}]}}'
+  register: nginx_ingress_nodeport_patch
+  changed_when: "'patched' in nginx_ingress_nodeport_patch.stdout"
+  when:
+    - nginx_ingress_patch_nodeports | bool
+    - "'http:' ~ nginx_ingress_http_node_port not in nginx_ingress_service_nodeports.stdout_lines
+      or 'https:' ~ nginx_ingress_https_node_port not in nginx_ingress_service_nodeports.stdout_lines"
+
+- name: Verify NGINX Ingress Controller service
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ nginx_ingress_kubeconfig }}"
+      - -n
+      - "{{ nginx_ingress_namespace }}"
+      - get
+      - service
+      - "{{ nginx_ingress_controller_name }}"
+      - -o
+      - wide
+  register: nginx_ingress_service_state
+  changed_when: false
+
+- name: Report NGINX Ingress Controller installation state
+  ansible.builtin.debug:
+    msg:
+      - "NGINX Ingress namespace: {{ nginx_ingress_namespace }}"
+      - "NGINX Ingress manifest: {{ nginx_ingress_manifest_url }}"
+      - "Service state: {{ nginx_ingress_service_state.stdout }}"
+      - "NodePorts pinned for AWS NLB: {{ nginx_ingress_patch_nodeports }}"

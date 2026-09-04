@@ -1,0 +1,115 @@
+---
+- name: Assert exactly one control plane host is configured
+  ansible.builtin.assert:
+    that:
+      - groups["control_plane"] | length == 1
+    fail_msg: "Expected exactly one host in the control_plane inventory group."
+  run_once: true
+
+- name: Check admin kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ calico_kubeconfig }}"
+  register: calico_admin_conf
+
+- name: Validate control plane is initialized
+  ansible.builtin.assert:
+    that:
+      - calico_admin_conf.stat.exists
+      - calico_admin_conf.stat.isreg
+    fail_msg: "Control plane is not initialized yet. Run playbooks/20-init-control-plane.yml before playbooks/40-install-calico.yml."
+
+- name: Check kubectl can read cluster nodes
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ calico_kubeconfig }}"
+      - get
+      - nodes
+      - --no-headers
+  register: calico_nodes_check
+  changed_when: false
+
+- name: Apply Tigera operator manifest
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ calico_kubeconfig }}"
+      - apply
+      - -f
+      - "{{ calico_operator_manifest_url }}"
+  register: calico_operator_apply
+  changed_when: >
+    'created' in calico_operator_apply.stdout
+    or 'configured' in calico_operator_apply.stdout
+
+- name: Wait for Tigera operator deployment
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ calico_kubeconfig }}"
+      - -n
+      - tigera-operator
+      - rollout
+      - status
+      - deployment/tigera-operator
+      - "--timeout={{ calico_wait_timeout }}"
+  changed_when: false
+
+- name: Wait for Calico Installation CRD
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ calico_kubeconfig }}"
+      - wait
+      - --for
+      - condition=Established
+      - crd/installations.operator.tigera.io
+      - "--timeout={{ calico_wait_timeout }}"
+  changed_when: false
+
+- name: Wait for Calico APIServer CRD
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ calico_kubeconfig }}"
+      - wait
+      - --for
+      - condition=Established
+      - crd/apiservers.operator.tigera.io
+      - "--timeout={{ calico_wait_timeout }}"
+  changed_when: false
+  when: calico_enable_api_server | bool
+
+- name: Apply Calico custom resources
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ calico_kubeconfig }}"
+      - apply
+      - -f
+      - -
+    stdin: "{{ lookup('template', 'custom-resources.yaml.j2') }}"
+  register: calico_custom_resources_apply
+  changed_when: >
+    'created' in calico_custom_resources_apply.stdout
+    or 'configured' in calico_custom_resources_apply.stdout
+
+- name: Wait for Calico node daemonset
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ calico_kubeconfig }}"
+      - -n
+      - calico-system
+      - rollout
+      - status
+      - daemonset/calico-node
+      - "--timeout={{ calico_wait_timeout }}"
+  changed_when: false
+
+- name: Report Calico installation state
+  ansible.builtin.debug:
+    msg:
+      - "Calico operator manifest: {{ calico_operator_manifest_url }}"
+      - "Calico pod network CIDR: {{ calico_pod_network_cidr }}"
+      - "Calico encapsulation: {{ calico_encapsulation }}"

@@ -1,0 +1,12 @@
+---
+calico_version: v3.30.3
+calico_operator_manifest_url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/tigera-operator.yaml"
+
+calico_kubeconfig: /etc/kubernetes/admin.conf
+calico_pod_network_cidr: "192.168.0.0/16"
+calico_encapsulation: VXLAN
+calico_nat_outgoing: Enabled
+calico_node_selector: all()
+calico_enable_api_server: true
+
+calico_wait_timeout: 300s

@@ -1,0 +1,13 @@
+---
+nginx_ingress_controller_version: v1.15.1
+nginx_ingress_namespace: ingress-nginx
+nginx_ingress_controller_name: ingress-nginx-controller
+nginx_ingress_manifest_url: "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-{{ nginx_ingress_controller_version }}/deploy/static/provider/baremetal/deploy.yaml"
+
+nginx_ingress_kubeconfig: /etc/kubernetes/admin.conf
+nginx_ingress_wait_timeout: 300s
+
+# Keep these aligned with the manually created AWS NLB target groups.
+nginx_ingress_patch_nodeports: true
+nginx_ingress_http_node_port: 31732
+nginx_ingress_https_node_port: 32086

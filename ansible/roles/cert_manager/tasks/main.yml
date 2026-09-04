@@ -1,0 +1,128 @@
+---
+- name: Assert exactly one control plane host is configured
+  ansible.builtin.assert:
+    that:
+      - groups["control_plane"] | length == 1
+    fail_msg: "Expected exactly one host in the control_plane inventory group."
+  run_once: true
+
+- name: Check admin kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ cert_manager_kubeconfig }}"
+  register: cert_manager_admin_conf
+
+- name: Validate control plane is initialized
+  ansible.builtin.assert:
+    that:
+      - cert_manager_admin_conf.stat.exists
+      - cert_manager_admin_conf.stat.isreg
+    fail_msg: "Control plane is not initialized yet. Run playbooks/20-init-control-plane.yml before playbooks/70-install-cert-manager.yml."
+
+- name: Check kubectl can read cluster nodes
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ cert_manager_kubeconfig }}"
+      - get
+      - nodes
+      - --no-headers
+  changed_when: false
+
+- name: Apply cert-manager install manifest
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ cert_manager_kubeconfig }}"
+      - apply
+      - -f
+      - "{{ cert_manager_manifest_url }}"
+  register: cert_manager_manifest_apply
+  changed_when: >
+    'created' in cert_manager_manifest_apply.stdout
+    or 'configured' in cert_manager_manifest_apply.stdout
+
+- name: Wait for cert-manager CRDs
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ cert_manager_kubeconfig }}"
+      - wait
+      - --for
+      - condition=Established
+      - "crd/{{ item }}"
+      - "--timeout={{ cert_manager_wait_timeout }}"
+  changed_when: false
+  loop: "{{ cert_manager_crds }}"
+
+- name: Wait for cert-manager workloads
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ cert_manager_kubeconfig }}"
+      - -n
+      - "{{ cert_manager_namespace }}"
+      - rollout
+      - status
+      - "{{ item }}"
+      - "--timeout={{ cert_manager_wait_timeout }}"
+  changed_when: false
+  loop: "{{ cert_manager_rollout_workloads }}"
+
+- name: Validate ACME email is configured
+  ansible.builtin.assert:
+    that:
+      - cert_manager_acme_email | length > 0
+      - "'@' in cert_manager_acme_email"
+    fail_msg: "Set cert_manager_acme_email, for example: cd ansible && ansible-playbook playbooks/70-install-cert-manager.yml -e cert_manager_acme_email=you@example.com"
+  when: cert_manager_create_cluster_issuer | bool
+
+- name: Apply HTTP-01 ClusterIssuer
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ cert_manager_kubeconfig }}"
+      - apply
+      - -f
+      - -
+    stdin: |
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: ClusterIssuer
+      metadata:
+        name: {{ cert_manager_cluster_issuer_name }}
+      spec:
+        acme:
+          email: {{ cert_manager_acme_email | quote }}
+          server: {{ cert_manager_acme_server }}
+          privateKeySecretRef:
+            name: {{ cert_manager_private_key_secret_name }}
+          solvers:
+            - http01:
+                ingress:
+                  class: {{ cert_manager_http01_ingress_class | quote }}
+  register: cert_manager_clusterissuer_apply
+  changed_when: >
+    'created' in cert_manager_clusterissuer_apply.stdout
+    or 'configured' in cert_manager_clusterissuer_apply.stdout
+  when: cert_manager_create_cluster_issuer | bool
+
+- name: Wait for ClusterIssuer to become ready
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ cert_manager_kubeconfig }}"
+      - wait
+      - --for
+      - condition=Ready
+      - "clusterissuer/{{ cert_manager_cluster_issuer_name }}"
+      - "--timeout={{ cert_manager_wait_timeout }}"
+  changed_when: false
+  when: cert_manager_create_cluster_issuer | bool
+
+- name: Report cert-manager installation state
+  ansible.builtin.debug:
+    msg:
+      - "cert-manager namespace: {{ cert_manager_namespace }}"
+      - "cert-manager manifest: {{ cert_manager_manifest_url }}"
+      - "ClusterIssuer managed: {{ cert_manager_create_cluster_issuer }}"
+      - "ClusterIssuer name: {{ cert_manager_cluster_issuer_name }}"

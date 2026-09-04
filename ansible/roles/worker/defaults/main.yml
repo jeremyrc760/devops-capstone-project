@@ -1,0 +1,6 @@
+---
+worker_join_command_source_host: "{{ groups['control_plane'][0] }}"
+worker_join_command_source_path: /root/kubeadm/join-workers.sh
+worker_join_command_local_dir: /root/kubeadm
+worker_join_command_local_path: "{{ worker_join_command_local_dir }}/join-workers.sh"
+worker_kubelet_conf_path: /etc/kubernetes/kubelet.conf

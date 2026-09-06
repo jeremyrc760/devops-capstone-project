@@ -1,0 +1,115 @@
+grafanaAdminSealedSecret:
+  enabled: true
+  name: grafana-admin-credentials
+  encryptedData:
+    admin-user: AgBn0mREjIEAiv+iX2M6SlgdFsWKcqGPIauypCdJBa+MbCclx/XnDCrJe4IjQK2fDkpwWa9iAvn5mHPWn0YUCLM86P5lno0A2g+2X+P+ykSExK6+aTQIm6Be2Ujzv2G4WIbbt7d4tCm1dbiDwyW0WTFXv/B0axcqNgO3hSFJXsoyuEhMP7jNIWqn88e8sjg8wysm9OTn7EqPO0/bZHmlt8+yhilFgw06viX4VlD3cZsTB5O5kkixSvBGQaufZJL6tdSwC+9/dv5Sjp4SggBoDTYI1mSjTYqFTKiEYMKr73oz3CNFm+G+9I1j4m4v8INo0Eg0Pr5lf7RHAg4/+ckHiFV0gwhHea9wsxM1qrxvIPt9/j9m8y2ML+Ff0AH8k5gJJ7DkIJYmLnOE+82/D5LtkI8qbO8wwybJxRHjMAVFLb339B4Kxa+9oIeTFTTmBD+k/QNUxNat1SS+Rfwbu8Znawx7AJmL8PJDkP8MC0wq/5zavXIx5Qq3NJjtTSZcCnvMsPuffmsbh7M6YdInDlR91CwNYkfyO6mSVBeseShaSPREsjYKfYdcI6YQho9JhJaSYA1ylmPoKxbhTu/xsTj6qYGFN5O23gVmKoj9Z3I5PadaH6akXjIE+D6AXonNO8W5aoS99pZb5Ewe4r/p8mB4EF/+j49r+vu82W2UJqCc/QUFGPi4kizZ7nFDIwM7AvRruRGmfv9++g==
+    admin-password: AgB9reEeNNhjEIDs26VZddSeU61mRx4l7Crfl0vmW5XEnTy993S4zBFg4SiV6DMPLPku7Wcaw4S3/d6ZSdPi6i3okhwF3mnvTSqxGfEqH4OAH9xuYWS9qPyWBm8D5WzoSb5GWt1ACuQYNrqqsrv2j5XGV7yeeUO7GkCc75fbv4VZ3SbeVmquv7aA0FVPh4bfjDESer06gju7OWx93+FeqepqwBaWPFdbhCSS22pV8XSIZgGMl8arfvwfDVkIzbOOazCFY3cUnZa0OYYHJmhATYeNpeGErnbyKhTeFOsclQoaTr6rabHxKebsAhEs0kV1gFEC23t7sfV1hPyPmyAF+zUoEDazZIxD4IxbBcFv3hg3fegqXfn4iBet9v02ErtOURZeOPYV4a3ES+02HvafnlYrovQCfI+2eyF9qQWcKBwuVVlNTAZLiyiEybcNzNLBgc9Y3Th+mnD2mlNpLGo8D06XCCTzSpgjtbP8malC9uvBOFvTsDECusn4+j1fjzCp4jGrKnnfkglWFcm1RFLVQcwDCIxBkwqdxPNO6EJX+eMgv13mLvWc3bWj09U/4mRnlKCjNfWlVyWBjxDBOm0wERiQfX0aBircQspcxPR9B54YLow+3aIRbxETqkWcjWLCZD7VRIK8sKkyWuTm7Hnhx7454NiSYGJXODu08Z/rYMvwTTLjlZHBr6JhYPgg13JQvTf82cFR4tEpzwV07jrD0c+UNSXorIi4/pGnfMz191N71dc=
+
+kube-prometheus-stack:
+  fullnameOverride: monitoring
+
+  defaultRules:
+    create: true
+
+  kubeApiServer:
+    enabled: true
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  kubeEtcd:
+    enabled: false
+  kubeProxy:
+    enabled: false
+  coreDns:
+    enabled: true
+
+  alertmanager:
+    enabled: true
+    service:
+      type: ClusterIP
+    alertmanagerSpec:
+      retention: 24h
+      resources:
+        requests:
+          cpu: 20m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      storage: {}
+
+  grafana:
+    enabled: true
+    admin:
+      existingSecret: grafana-admin-credentials
+      userKey: admin-user
+      passwordKey: admin-password
+    defaultDashboardsEnabled: true
+    service:
+      type: ClusterIP
+    ingress:
+      enabled: false
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+  kube-state-metrics:
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  prometheus-node-exporter:
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+
+  prometheusOperator:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+  prometheus:
+    enabled: true
+    service:
+      type: ClusterIP
+    prometheusSpec:
+      replicas: 1
+      retention: 48h
+      retentionSize: 1GB
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 768Mi
+      storageSpec: {}
+      serviceMonitorSelectorNilUsesHelmValues: false
+      serviceMonitorSelector: {}
+      serviceMonitorNamespaceSelector: {}
+      podMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelector: {}
+      podMonitorNamespaceSelector: {}
+      ruleSelectorNilUsesHelmValues: false
+      ruleSelector: {}
+      ruleNamespaceSelector: {}
+

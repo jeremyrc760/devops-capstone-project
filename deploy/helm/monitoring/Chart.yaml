@@ -1,0 +1,11 @@
+apiVersion: v2
+name: monitoring
+description: Lightweight kube-prometheus-stack deployment for the AWS kubeadm cluster
+type: application
+version: 0.1.0
+appVersion: "v0.93.1"
+dependencies:
+  - name: kube-prometheus-stack
+    version: 89.2.3
+    repository: https://prometheus-community.github.io/helm-charts
+

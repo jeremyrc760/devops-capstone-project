@@ -1,0 +1,56 @@
+namespace:
+  create: true
+  name: accounts
+
+accounts:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/jeremyrc760/devops-capstone-project
+    tag: aws-kubeadm-gitops
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8080
+    nodePort: null
+  config:
+    databaseHost: postgresql
+    forceHttps: "false"
+  probes:
+    readiness:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    liveness:
+      initialDelaySeconds: 30
+      periodSeconds: 20
+
+postgresql:
+  replicaCount: 1
+  image:
+    repository: postgres
+    tag: 16-alpine
+    pullPolicy: IfNotPresent
+  service:
+    port: 5432
+  persistence:
+    enabled: false
+    size: 5Gi
+    storageClassName: ""
+  sealedSecret:
+    enabled: false
+    encryptedData:
+      database-name: ""
+      database-user: ""
+      database-password: ""
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-http01
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  host: customer-account.api.jeremycloudlabs.com
+  path: /
+  pathType: Prefix
+  tls:
+    enabled: true
+    secretName: accounts-tls

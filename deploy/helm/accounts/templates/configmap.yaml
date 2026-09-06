@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: accounts-config
+  namespace: {{ include "accounts.namespace" . }}
+  labels:
+    {{- include "accounts.labels" . | nindent 4 }}
+data:
+  DATABASE_HOST: {{ .Values.accounts.config.databaseHost | quote }}
+  FORCE_HTTPS: {{ .Values.accounts.config.forceHttps | quote }}

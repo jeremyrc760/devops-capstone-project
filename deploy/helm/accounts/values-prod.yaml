@@ -1,0 +1,12 @@
+accounts:
+  replicaCount: 3
+  service:
+    type: ClusterIP
+    nodePort: null
+
+ingress:
+  enabled: true
+  host: customer-account.api.jeremycloudlabs.com
+  tls:
+    enabled: true
+    secretName: accounts-tls

@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: accounts-helm-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jeremyrc760/devops-capstone-project.git
+    targetRevision: aws-kubeadm-gitops
+    path: deploy/helm/accounts
+    helm:
+      releaseName: accounts-dev
+      valueFiles:
+        - values-helm-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: accounts-helm-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

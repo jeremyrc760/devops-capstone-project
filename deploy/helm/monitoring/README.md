@@ -17,6 +17,11 @@ Persistent storage is intentionally disabled because the cluster does not yet
 have a Kubernetes StorageClass. Metrics and Grafana runtime data can be lost
 when their Pods are recreated. Add the AWS EBS CSI driver before enabling PVCs.
 
+Prometheus, Alertmanager, and Grafana are scheduled on the control-plane node,
+which has more memory than the two lab workers. Their tolerations apply only to
+the control-plane `NoSchedule` taint; node-exporter still runs on every node and
+the remaining monitoring components can run on workers.
+
 The kubeadm control-plane component metrics for etcd, kube-scheduler,
 kube-controller-manager, and kube-proxy are initially disabled because their
 metrics endpoints bind to localhost by default. They can be enabled after those

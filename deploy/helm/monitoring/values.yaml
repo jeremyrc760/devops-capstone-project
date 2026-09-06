@@ -29,6 +29,12 @@ kube-prometheus-stack:
     service:
       type: ClusterIP
     alertmanagerSpec:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       retention: 24h
       resources:
         requests:
@@ -41,6 +47,12 @@ kube-prometheus-stack:
 
   grafana:
     enabled: true
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: ""
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
     admin:
       existingSecret: grafana-admin-credentials
       userKey: admin-user
@@ -92,6 +104,12 @@ kube-prometheus-stack:
     service:
       type: ClusterIP
     prometheusSpec:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       replicas: 1
       retention: 48h
       retentionSize: 1GB
@@ -112,4 +130,3 @@ kube-prometheus-stack:
       ruleSelectorNilUsesHelmValues: false
       ruleSelector: {}
       ruleNamespaceSelector: {}
-

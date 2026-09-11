@@ -89,6 +89,25 @@ class TestAccountService(TestCase):
         data = resp.get_json()
         self.assertEqual(data["status"], "OK")
 
+    def test_metrics(self):
+        """It should expose bounded Prometheus application metrics"""
+        account = self._create_accounts(1)[0]
+        self.client.get(f"{BASE_URL}/{account.id}")
+
+        response = self.client.get("/metrics")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.content_type.startswith("text/plain"))
+
+        metrics = response.get_data(as_text=True)
+        self.assertIn("accounts_service_info", metrics)
+        self.assertIn("accounts_http_requests_total", metrics)
+        self.assertIn("accounts_http_request_duration_seconds_bucket", metrics)
+        self.assertIn("accounts_operations_total", metrics)
+        self.assertIn("accounts_db_operation_duration_seconds_bucket", metrics)
+        self.assertIn('route="/accounts/<int:account_id>"', metrics)
+        self.assertNotIn(f'route="{BASE_URL}/{account.id}"', metrics)
+        self.assertNotIn('route="/health"', metrics)
+
     def test_create_account(self):
         """It should Create a new Account"""
         account = AccountFactory()

@@ -6,6 +6,7 @@ All of the models are stored in this module
 import logging
 from datetime import date
 from flask_sqlalchemy import SQLAlchemy
+from service.metrics import observe_database_operation
 
 logger = logging.getLogger("flask.app")
 
@@ -37,21 +38,24 @@ class PersistentBase:
         """
         logger.info("Creating %s", self.name)
         self.id = None  # id must be none to generate next primary key
-        db.session.add(self)
-        db.session.commit()
+        with observe_database_operation("create"):
+            db.session.add(self)
+            db.session.commit()
 
     def update(self):
         """
         Updates a Account to the database
         """
         logger.info("Updating %s", self.name)
-        db.session.commit()
+        with observe_database_operation("update"):
+            db.session.commit()
 
     def delete(self):
         """Removes a Account from the data store"""
         logger.info("Deleting %s", self.name)
-        db.session.delete(self)
-        db.session.commit()
+        with observe_database_operation("delete"):
+            db.session.delete(self)
+            db.session.commit()
 
     @classmethod
     def init_db(cls, app):
@@ -67,13 +71,15 @@ class PersistentBase:
     def all(cls):
         """Returns all of the records in the database"""
         logger.info("Processing all records")
-        return cls.query.all()
+        with observe_database_operation("list"):
+            return cls.query.all()
 
     @classmethod
     def find(cls, by_id):
         """Finds a record by it's ID"""
         logger.info("Processing lookup for id %s ...", by_id)
-        return cls.query.get(by_id)
+        with observe_database_operation("read"):
+            return cls.query.get(by_id)
 
 
 ######################################################################

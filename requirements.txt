@@ -13,6 +13,7 @@ python-dotenv==0.20.0
 # Runtime dependencies
 gunicorn==20.1.0
 honcho==1.1.0
+prometheus-client==0.26.0
 
 # Code quality
 pylint==2.14.0

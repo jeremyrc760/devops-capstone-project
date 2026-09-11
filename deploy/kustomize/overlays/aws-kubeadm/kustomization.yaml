@@ -11,3 +11,7 @@ patches:
       name: accounts
       namespace: accounts
     path: accounts-service-clusterip-patch.yaml
+
+images:
+  - name: ghcr.io/jeremyrc760/devops-capstone-project
+    newTag: sha-60581cf

@@ -2,7 +2,7 @@ apiVersion: v2
 name: monitoring
 description: Lightweight kube-prometheus-stack deployment for the AWS kubeadm cluster
 type: application
-version: 0.2.0
+version: 0.2.1
 appVersion: "v0.93.1"
 dependencies:
   - name: kube-prometheus-stack

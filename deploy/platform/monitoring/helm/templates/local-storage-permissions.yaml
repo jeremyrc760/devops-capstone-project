@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-local-storage-permissions
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: local-storage-permissions
+        app.kubernetes.io/part-of: monitoring
+    spec:
+      nodeSelector:
+        workload: monitoring
+      restartPolicy: OnFailure
+      containers:
+        - name: initialize-prometheus-storage
+          image: busybox:1.37.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -ec
+            - chown 1000:2000 /prometheus-data && chmod 0770 /prometheus-data
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - FOWNER
+          volumeMounts:
+            - name: prometheus-data
+              mountPath: /prometheus-data
+      volumes:
+        - name: prometheus-data
+          hostPath:
+            path: /var/lib/prometheus-gitops-data
+            type: DirectoryOrCreate

@@ -19,6 +19,8 @@ cluster.
 The static local volumes use `hostPath` on `k8s-monitoring-1`. Their reclaim
 policy is `Retain`, but they are tied to that EC2 node. A future production
 deployment should replace them with dynamically provisioned EBS volumes.
+An Argo CD PreSync Job initializes the Prometheus host directory with the UID
+and GID required by the non-root Prometheus container.
 
 Prometheus, Alertmanager, Grafana, Prometheus Operator, and kube-state-metrics
 are scheduled on the node labeled `workload=monitoring`. node-exporter still
@@ -53,6 +55,17 @@ ConfigMaps consumed by Grafana sidecars.
 The SMTP application password and Prometheus basic-auth value are never stored
 in plaintext. They are encrypted for this cluster in SealedSecret manifests.
 
-Public ingresses are controlled by `migrationIngress.enabled`. Keep it `false`
-while validating the Helm stack in parallel, then enable it for the final
-cutover from `monitoring-manual`.
+Public ingresses are controlled by `migrationIngress.enabled`. It is enabled
+for the active GitOps stack. Disable it before restoring the rollback ingresses
+from `monitoring-manual`, because NGINX rejects duplicate host and path pairs.
+
+## Runtime checks
+
+```bash
+kubectl get application monitoring -n argocd
+kubectl get pods,pvc,ingress -n monitoring
+kubectl get certificate -n monitoring
+```
+
+Expected steady state is an Argo CD Application that is `Synced` and `Healthy`,
+all Pods ready, both PVCs bound, and both certificates ready.

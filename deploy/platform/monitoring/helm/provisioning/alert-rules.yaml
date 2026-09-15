@@ -1,0 +1,553 @@
+apiVersion: 1
+groups:
+    - orgId: 1
+      name: accounts-api-alerts
+      folder: Accounts API Alerts
+      interval: 1m
+      rules:
+        - uid: accounts-api-down
+          title: Accounts API Down
+          condition: B
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: prometheus
+              model:
+                expr: min(up{namespace="accounts",service="accounts"})
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: A
+            - refId: B
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 1
+                        type: lt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - A
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: B
+                type: classic_conditions
+          noDataState: Alerting
+          execErrState: Alerting
+          for: 1m
+          annotations:
+            description: Prometheus cannot scrape the Accounts API target, or the target reports down.
+            summary: Accounts API is down
+          labels:
+            service: accounts-api
+            severity: critical
+          isPaused: false
+          notification_settings:
+            receiver: email-mcmaster
+            group_by:
+                - alertname
+                - grafana_folder
+                - service
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 4h
+        - uid: accounts-api-high-5xx
+          title: Accounts API High 5xx Error Rate
+          condition: B
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: prometheus
+              model:
+                expr: 100 * (sum(rate(accounts_http_requests_total{status_code=~"5.."}[5m])) or vector(0)) / clamp_min(sum(rate(accounts_http_requests_total[5m])), 0.000001)
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: A
+            - refId: B
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 5
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - A
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: B
+                type: classic_conditions
+          noDataState: OK
+          execErrState: Alerting
+          for: 5m
+          annotations:
+            description: The Accounts API 5xx error rate has exceeded 5% for 5 minutes.
+            summary: Accounts API 5xx error rate is high
+          labels:
+            service: accounts-api
+            severity: critical
+          isPaused: false
+          notification_settings:
+            receiver: email-mcmaster
+            group_by:
+                - alertname
+                - grafana_folder
+                - service
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 4h
+        - uid: accounts-api-high-p95-latency
+          title: Accounts API High P95 Latency
+          condition: B
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: prometheus
+              model:
+                expr: histogram_quantile(0.95, sum by (le) (rate(accounts_http_request_duration_seconds_bucket[5m])))
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: A
+            - refId: B
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0.5
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - A
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: B
+                type: classic_conditions
+          noDataState: OK
+          execErrState: Alerting
+          for: 5m
+          annotations:
+            description: The Accounts API P95 latency has exceeded 0.5 seconds for 5 minutes.
+            summary: Accounts API P95 latency is high
+          labels:
+            service: accounts-api
+            severity: warning
+          isPaused: false
+          notification_settings:
+            receiver: email-mcmaster
+            group_by:
+                - alertname
+                - grafana_folder
+                - service
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 4h
+    - orgId: 1
+      name: node-health
+      folder: Infrastructure Alerts
+      interval: 1m
+      rules:
+        - uid: node-exporter-down
+          title: Node Exporter Down
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: prometheus
+              model:
+                expr: up{job="node-exporter"}
+                hide: false
+                instant: true
+                intervalMs: 1000
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: B
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                expression: A
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                settings:
+                    mode: dropNN
+                type: reduce
+            - refId: C
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 1
+                        type: lt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                expression: B
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: Alerting
+          execErrState: Alerting
+          for: 2m
+          annotations:
+            description: Prometheus has been unable to scrape node exporter on {{ $labels.instance }} for 2 minutes.
+            summary: Node exporter is down on {{ $labels.instance }}
+          labels:
+            component: node-exporter
+            service: infrastructure
+            severity: critical
+          isPaused: false
+          notification_settings:
+            receiver: email-mcmaster
+            group_by:
+                - alertname
+                - grafana_folder
+                - service
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 4h
+        - uid: node-high-cpu
+          title: Node High CPU Usage
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: prometheus
+              model:
+                expr: 100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job="node-exporter",mode="idle"}[5m])))
+                hide: false
+                instant: true
+                intervalMs: 1000
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: B
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                expression: A
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                settings:
+                    mode: dropNN
+                type: reduce
+            - refId: C
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 85
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                expression: B
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: OK
+          execErrState: Alerting
+          for: 10m
+          annotations:
+            description: CPU utilization on {{ $labels.instance }} has exceeded 85% for 10 minutes.
+            summary: CPU usage is high on {{ $labels.instance }}
+          labels:
+            component: node-exporter
+            service: infrastructure
+            severity: warning
+          isPaused: false
+          notification_settings:
+            receiver: email-mcmaster
+            group_by:
+                - alertname
+                - grafana_folder
+                - service
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 4h
+        - uid: node-low-memory
+          title: Node Low Available Memory
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: prometheus
+              model:
+                expr: 100 * node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"}
+                hide: false
+                instant: true
+                intervalMs: 1000
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: B
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                expression: A
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                settings:
+                    mode: dropNN
+                type: reduce
+            - refId: C
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 10
+                        type: lt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                expression: B
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: OK
+          execErrState: Alerting
+          for: 10m
+          annotations:
+            description: Available memory on {{ $labels.instance }} has remained below 10% for 10 minutes.
+            summary: Available memory is low on {{ $labels.instance }}
+          labels:
+            component: node-exporter
+            service: infrastructure
+            severity: warning
+          isPaused: false
+          notification_settings:
+            receiver: email-mcmaster
+            group_by:
+                - alertname
+                - grafana_folder
+                - service
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 4h
+        - uid: node-low-root-disk
+          title: Node Low Root Filesystem Space
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: prometheus
+              model:
+                expr: 100 * node_filesystem_avail_bytes{job="node-exporter",mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="node-exporter",mountpoint="/",fstype!~"tmpfs|overlay"}
+                hide: false
+                instant: true
+                intervalMs: 1000
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: B
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                expression: A
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                settings:
+                    mode: dropNN
+                type: reduce
+            - refId: C
+              datasourceUid: "-100"
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 15
+                        type: lt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: "-100"
+                expression: B
+                hide: false
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: OK
+          execErrState: Alerting
+          for: 10m
+          annotations:
+            description: Available root filesystem space on {{ $labels.instance }} has remained below 15% for 10 minutes.
+            summary: Root filesystem space is low on {{ $labels.instance }}
+          labels:
+            component: node-exporter
+            service: infrastructure
+            severity: critical
+          isPaused: false
+          notification_settings:
+            receiver: email-mcmaster
+            group_by:
+                - alertname
+                - grafana_folder
+                - service
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 4h

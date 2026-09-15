@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus
+  namespace: monitoring-manual
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: manual
+    app.kubernetes.io/part-of: manual-monitoring
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-http01
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: prometheus-basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: "Authentication Required - Prometheus"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - prometheus.jeremycloudlabs.com
+      secretName: prometheus-tls
+  rules:
+    - host: prometheus.jeremycloudlabs.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus
+                port:
+                  number: 9090

@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: accounts
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jeremyrc760/devops-capstone-project.git
+    targetRevision: aws-kubeadm-gitops
+    path: deploy/applications/accounts/kustomize/overlays/aws-kubeadm
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: accounts
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

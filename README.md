@@ -36,6 +36,7 @@ Main components:
 | --- | --- |
 | `service/routes.py` | Defines REST API routes such as `/`, `/health`, and `/accounts` |
 | `service/models.py` | Defines the `Account` SQLAlchemy model and database CRUD behavior |
+| `service/metrics.py` | Defines Prometheus HTTP, business, and database instrumentation |
 | `service/config.py` | Builds the database connection configuration from environment variables |
 | `service/__init__.py` | Creates and initializes the Flask application |
 | `service/common/` | Shared helpers for status codes, logging, CLI commands, and error handling |
@@ -97,6 +98,9 @@ This project uses GitHub Actions for CI and image publishing.
 
 The container image is tagged from branch and commit metadata. The AWS kubeadm GitOps deployment currently uses the image from the `aws-kubeadm-gitops` branch.
 
+The complete delivery and monitoring flow is documented in
+[`docs/architecture/ci-cd-and-monitoring.md`](docs/architecture/ci-cd-and-monitoring.md).
+
 ## Kubernetes Infrastructure
 
 The Kubernetes cluster is self-managed on AWS EC2 using `kubeadm`.
@@ -108,6 +112,7 @@ Current cluster shape:
 | `k8s-control-plane-1` | Control plane | Runs Kubernetes API server, scheduler, controller manager, and etcd |
 | `k8s-worker-1` | Worker | Runs application and platform pods |
 | `k8s-worker-2` | Worker | Runs application and platform pods |
+| `k8s-monitoring-1` | Monitoring worker | Runs the manually assembled Prometheus and Grafana stack |
 
 Installed cluster components:
 
@@ -134,7 +139,7 @@ The self-managed Kubernetes cluster runs inside a dedicated AWS VPC.
 | Internet Gateway | Allows public internet traffic in and out of the VPC |
 | Route Table | Routes `0.0.0.0/0` to the Internet Gateway and VPC CIDR locally |
 | Security Groups | Controls SSH, NodePort, HTTP, and HTTPS access |
-| EC2 instances | One control plane and two worker nodes |
+| EC2 instances | One control plane, two application workers, and one monitoring worker |
 | Network Load Balancer | Stable public entry point for HTTP/HTTPS traffic |
 | Route 53 | DNS record for the API domain |
 
@@ -181,15 +186,17 @@ Important detail: the NGINX Ingress Controller runs as Kubernetes pods on worker
 
 Argo CD watches this repository and applies the Kubernetes manifests from the GitOps branch.
 
-Current Argo CD source:
+Current Argo CD applications:
 
-| Field | Value |
-| --- | --- |
-| Repository | `https://github.com/jeremyrc760/devops-capstone-project` |
-| Branch | `aws-kubeadm-gitops` |
-| Path | `deploy/kustomize/overlays/aws-kubeadm` |
-| Destination | In-cluster Kubernetes API |
-| Namespace | `accounts` |
+| Application | Source path | Namespace | Purpose |
+| --- | --- | --- | --- |
+| `accounts` | `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` | `accounts` | Active Accounts API deployment |
+| `accounts-helm-dev` | `deploy/applications/accounts/helm` | `accounts-helm-dev` | Helm learning/dev deployment |
+| `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Helm monitoring migration target |
+
+All three use the `aws-kubeadm-gitops` branch. The active monitoring stack is
+still the manually applied `monitoring-manual` namespace, not the `monitoring`
+Argo CD Application.
 
 GitOps flow:
 
@@ -212,32 +219,34 @@ flowchart LR
     ghcr --> workloads
 ```
 
-## Kubernetes Manifests
+## Deployment Manifests
 
-The deployment manifests are organized in two styles.
+Deployment assets are grouped by ownership under `deploy/applications/` and
+`deploy/platform/`. See [`deploy/README.md`](deploy/README.md) for the complete
+layout.
 
 ### Earlier AWS kubeadm Manifests
 
 ```text
-deploy/aws-kubeadm/
+archive/aws-kubeadm-manual/
 ```
 
-This directory documents the earlier manual deployment approach. It is useful as a learning record of how the app was first deployed to the self-managed cluster.
+This archived directory documents the earlier manual deployment approach. It is useful as a learning record of how the app was first deployed to the self-managed cluster, but it is not part of the current GitOps deployment.
 
 ### Kustomize GitOps Manifests
 
 ```text
-deploy/kustomize/
+deploy/applications/accounts/kustomize/
 ```
 
 This is the current GitOps deployment structure.
 
 | Path | Purpose |
 | --- | --- |
-| `deploy/kustomize/base/` | Shared Kubernetes resources |
-| `deploy/kustomize/overlays/aws-kubeadm/` | Current AWS kubeadm cluster deployment |
-| `deploy/kustomize/overlays/dev/` | Development-style overlay |
-| `deploy/kustomize/overlays/prod/` | Production-style overlay |
+| `deploy/applications/accounts/kustomize/base/` | Shared Kubernetes resources |
+| `deploy/applications/accounts/kustomize/overlays/aws-kubeadm/` | Current AWS kubeadm cluster deployment |
+| `deploy/applications/accounts/kustomize/overlays/dev/` | Development-style overlay |
+| `deploy/applications/accounts/kustomize/overlays/prod/` | Production-style overlay |
 
 Current base resources:
 
@@ -248,6 +257,7 @@ Current base resources:
 | `SealedSecret` | Stores encrypted PostgreSQL credentials safely in Git |
 | `Deployment/accounts` | Runs the Account API pods |
 | `Service/accounts` | Internal service for the Account API |
+| `ServiceMonitor/accounts` | Tells Prometheus to scrape the Accounts API `/metrics` endpoint |
 | `Deployment/postgresql` | Runs PostgreSQL for the lab environment |
 | `Service/postgresql` | Internal database service |
 | `Ingress/accounts` | Routes public HTTP/HTTPS traffic to the Account API |
@@ -285,7 +295,7 @@ flowchart LR
 The public certificate is stored under:
 
 ```text
-deploy/sealed-secrets/sealed-secrets-public-cert.pem
+deploy/platform/sealed-secrets/sealed-secrets-public-cert.pem
 ```
 
 This certificate is public by design. The private key remains inside the Kubernetes cluster.
@@ -320,6 +330,71 @@ HTTP currently redirects to HTTPS using the NGINX Ingress annotation:
 nginx.ingress.kubernetes.io/ssl-redirect: "true"
 ```
 
+## Application Observability
+
+The Accounts API exposes Prometheus metrics at `/metrics`. The
+`ServiceMonitor/accounts` resource discovers the Accounts Service and instructs
+Prometheus to scrape every backing Pod on the named `http` port every 30
+seconds.
+
+```text
+Accounts request -> Flask instrumentation -> /metrics
+                 -> ServiceMonitor -> Prometheus -> Grafana
+```
+
+Application metrics:
+
+| Metric | Type | Purpose |
+| --- | --- | --- |
+| `accounts_http_requests_total` | Counter | Request volume and status codes by method and route |
+| `accounts_http_request_duration_seconds` | Histogram | Request latency distribution by method and route |
+| `accounts_http_requests_in_progress` | Gauge | Requests currently being processed |
+| `accounts_operations_total` | Counter | Create, list, read, update, and delete outcomes |
+| `accounts_db_operation_duration_seconds` | Histogram | SQLAlchemy CRUD operation latency |
+| `accounts_db_errors_total` | Counter | Database failures by operation |
+| `accounts_service_info` | Info | Static application version information |
+
+The route label uses Flask route templates such as
+`/accounts/<int:account_id>`. Account IDs, names, email addresses, and other
+customer data are never used as Prometheus labels. `/health` and `/metrics` are
+excluded from the application request counters so Kubernetes probes and
+Prometheus scrapes do not distort business traffic.
+
+The public Ingress exposes only `/`, `/health`, and `/accounts`. It does not
+route `/metrics`, so application internals remain available to Prometheus over
+the cluster network without being published through the API domain.
+
+Example PromQL queries:
+
+```promql
+sum by (method, route) (rate(accounts_http_requests_total[5m]))
+```
+
+```promql
+100 *
+sum(rate(accounts_http_requests_total{status_code=~"5.."}[5m]))
+/
+clamp_min(sum(rate(accounts_http_requests_total[5m])), 0.001)
+```
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le, route) (
+    rate(accounts_http_request_duration_seconds_bucket[5m])
+  )
+)
+```
+
+The monitoring stack must be installed before applying the Kustomize overlay
+because `ServiceMonitor` is a Prometheus Operator custom resource.
+
+The currently active monitoring manifests live in
+`deploy/platform/monitoring/manual/` and run in `monitoring-manual`. Grafana
+stores dashboards, contact points, and Grafana-managed alert rules on a 5 GiB
+local `hostPath` PV on `k8s-monitoring-1`. Prometheus still uses `emptyDir`, so
+its historical metrics are lost if the Prometheus Pod is recreated.
+
 ## Useful Commands
 
 Check application health through the public domain:
@@ -352,10 +427,18 @@ Check Argo CD application status:
 kubectl get application accounts -n argocd
 ```
 
+Check application scrape discovery and metrics:
+
+```bash
+kubectl get servicemonitor accounts -n accounts
+kubectl port-forward -n accounts svc/accounts 8081:8080
+curl http://localhost:8081/metrics
+```
+
 Render the current AWS kubeadm Kustomize overlay locally:
 
 ```bash
-kubectl kustomize deploy/kustomize/overlays/aws-kubeadm
+kubectl kustomize deploy/applications/accounts/kustomize/overlays/aws-kubeadm
 ```
 
 ## Current Status
@@ -365,7 +448,7 @@ The project currently demonstrates:
 - A Python Flask REST API containerized with Docker
 - GitHub Actions CI and container image publishing to GHCR
 - A self-managed Kubernetes cluster on AWS EC2
-- Calico networking across one control plane and two worker nodes
+- Calico networking across one control plane and three worker nodes
 - Argo CD GitOps deployment from a dedicated branch and Kustomize overlay
 - PostgreSQL running inside Kubernetes for the lab environment
 - Sealed Secrets for encrypted Git-based secret management
@@ -373,6 +456,8 @@ The project currently demonstrates:
 - AWS Network Load Balancer as the public entry point
 - Route 53 custom domain integration
 - cert-manager and Let's Encrypt HTTPS certificate automation
+- Prometheus application instrumentation and ServiceMonitor discovery
+- Grafana dashboards and email alerts backed by the active manual monitoring stack
 
 ## Future Improvements
 
@@ -382,7 +467,7 @@ Potential next steps:
 - Add persistent storage for the in-cluster PostgreSQL demo
 - Manage AWS infrastructure with Terraform
 - Use ExternalDNS to manage Route 53 records from Kubernetes
-- Add Prometheus and Grafana monitoring
+- Add application SLO-based Prometheus alerts and a custom Grafana dashboard
 - Add structured application logs and centralized log collection
 - Add a frontend client for the Account API
 - Add production and development Argo CD Applications using separate overlays

@@ -44,7 +44,11 @@ kube-prometheus-stack:
     alertmanagerSpec:
       nodeSelector:
         workload: monitoring
-      tolerations: []
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: monitoring
+          effect: NoSchedule
       retention: 24h
       resources:
         requests:
@@ -60,7 +64,11 @@ kube-prometheus-stack:
     enabled: true
     nodeSelector:
       workload: monitoring
-    tolerations: []
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: monitoring
+        effect: NoSchedule
     admin:
       existingSecret: grafana-admin-credentials
       userKey: admin-user
@@ -108,6 +116,11 @@ kube-prometheus-stack:
   kube-state-metrics:
     nodeSelector:
       workload: monitoring
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: monitoring
+        effect: NoSchedule
     resources:
       requests:
         cpu: 20m
@@ -130,6 +143,11 @@ kube-prometheus-stack:
   prometheusOperator:
     nodeSelector:
       workload: monitoring
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: monitoring
+        effect: NoSchedule
     resources:
       requests:
         cpu: 50m
@@ -146,7 +164,11 @@ kube-prometheus-stack:
     prometheusSpec:
       nodeSelector:
         workload: monitoring
-      tolerations: []
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: monitoring
+          effect: NoSchedule
       replicas: 1
       retention: 48h
       retentionSize: 1GB

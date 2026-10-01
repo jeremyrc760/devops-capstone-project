@@ -94,7 +94,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "up{job=\"accounts-api\"}",
+          "expr": "up{namespace=\"accounts\",service=\"accounts\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"

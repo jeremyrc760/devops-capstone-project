@@ -47,27 +47,22 @@ server workload. Ingress TLS requires NGINX, cert-manager, and the
 | --- | --- | --- | --- |
 | `accounts` | `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` | `accounts` | Main Accounts deployment |
 | `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Monitoring platform |
-| `accounts-helm-dev` | `deploy/applications/accounts/helm` | `accounts-helm-dev` | Retained Helm experiment |
 
-All three Application definitions track the `aws-kubeadm-gitops` branch.
+Both Application definitions track the `aws-kubeadm-gitops` branch.
 
 Accounts uses Kustomize. Monitoring uses Helm to render its resources.
 Argo CD manages synchronization of both.
-
-The Accounts Helm experiment remains separate from the main deployment.
-It is not being retired as part of this directory cleanup.
 
 ## Sync Policies
 
 - `accounts`: automated synchronization and self-healing; automatic pruning
   is not enabled.
 - `monitoring`: automated synchronization, self-healing, and pruning.
-- `accounts-helm-dev`: automated synchronization, self-healing, and pruning.
 
 Pruning can delete managed cluster resources that are removed from the
 rendered Git configuration.
 
-All three definitions include a resource deletion finalizer. Deleting an
+Both definitions include a resource deletion finalizer. Deleting an
 Application can cascade to its managed resources; review the intended
 deletion behavior before retiring an application.
 

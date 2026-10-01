@@ -18,7 +18,6 @@ the Kustomize image tag automatically.
 | Application | Source path | Destination | Role |
 | --- | --- | --- | --- |
 | `accounts` | `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` | `accounts` | Active Accounts API deployment |
-| `accounts-helm-dev` | `deploy/applications/accounts/helm` | `accounts-helm-dev` | Helm learning/dev deployment |
 | `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Active monitoring stack managed through Helm and Argo CD |
 
 The Argo CD Application definitions live in

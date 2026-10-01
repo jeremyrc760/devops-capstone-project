@@ -190,10 +190,9 @@ Current Argo CD applications:
 | Application | Source path | Namespace | Purpose |
 | --- | --- | --- | --- |
 | `accounts` | `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` | `accounts` | Active Accounts API deployment |
-| `accounts-helm-dev` | `deploy/applications/accounts/helm` | `accounts-helm-dev` | Helm learning/dev deployment |
-| `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Active monitoring stack managed through Helm and ArgoCD |
+| `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Active monitoring stack managed through Helm and Argo CD |
 
-All three use the `aws-kubeadm-gitops` branch. The active monitoring stack
+Both use the `aws-kubeadm-gitops` branch. The active monitoring stack
 is managed by the `monitoring` Argo CD Application in the `monitoring`
 namespace. The manual manifests are retained for rollback reference.
 

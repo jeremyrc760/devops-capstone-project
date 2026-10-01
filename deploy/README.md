@@ -6,8 +6,7 @@ Deployment assets are grouped by ownership rather than packaging tool.
 deploy/
 ├── applications/
 │   └── accounts/
-│       ├── kustomize/       # active Accounts production manifests
-│       └── helm/            # Helm learning/dev deployment
+│       └── kustomize/       # active Accounts production manifests
 └── platform/
     ├── argocd/
     │   ├── applications/    # Argo CD Application resources

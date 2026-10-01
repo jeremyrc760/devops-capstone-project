@@ -1,18 +1,20 @@
-# Accounts Helm Chart
+# Archived Accounts Helm Experiment
 
-This chart is a Helm-based packaging alternative to the Accounts Kustomize manifests. It renders
-the Accounts API, PostgreSQL, networking, ingress, and optional SealedSecret
-resources from reusable templates and environment-specific values files.
+This retired chart is a Helm-based packaging experiment for the Accounts
+application. It renders the Accounts API, PostgreSQL, networking, ingress, and
+optional SealedSecret resources from reusable templates and environment-specific
+values files. It is retained for learning and reference and is not managed by
+Argo CD.
 
 ## Validate locally
 
 Run these commands from the repository root:
 
 ```bash
-helm lint deploy/applications/accounts/helm
-helm template accounts deploy/applications/accounts/helm \
+helm lint archive/accounts-helm-experiment
+helm template accounts archive/accounts-helm-experiment \
   --namespace accounts \
-  -f deploy/applications/accounts/helm/values-aws-kubeadm.yaml
+  -f archive/accounts-helm-experiment/values-aws-kubeadm.yaml
 ```
 
 Environment examples:

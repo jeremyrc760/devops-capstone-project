@@ -16,6 +16,11 @@ spec:
     spec:
       nodeSelector:
         workload: monitoring
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: monitoring
+          effect: NoSchedule
       restartPolicy: OnFailure
       containers:
         - name: initialize-prometheus-storage

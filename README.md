@@ -73,7 +73,6 @@ The application is packaged as a Docker image.
 | --- | --- |
 | `Dockerfile` | Builds the Flask app image using `python:3.9-slim` |
 | `requirements.txt` | Python runtime and test dependencies |
-| `gunicorn.conf.py` | Gunicorn server configuration |
 
 Runtime behavior:
 
@@ -112,7 +111,7 @@ Current cluster shape:
 | `k8s-control-plane-1` | Control plane | Runs Kubernetes API server, scheduler, controller manager, and etcd |
 | `k8s-worker-1` | Worker | Runs application and platform pods |
 | `k8s-worker-2` | Worker | Runs application and platform pods |
-| `k8s-monitoring-1` | Monitoring worker | Runs the manually assembled Prometheus and Grafana stack |
+| `k8s-monitoring-1` | Monitoring worker | Runs the helm-based monitoring stack managed by Argo CD |
 
 Installed cluster components:
 
@@ -192,11 +191,11 @@ Current Argo CD applications:
 | --- | --- | --- | --- |
 | `accounts` | `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` | `accounts` | Active Accounts API deployment |
 | `accounts-helm-dev` | `deploy/applications/accounts/helm` | `accounts-helm-dev` | Helm learning/dev deployment |
-| `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Helm monitoring migration target |
+| `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Active monitoring stack managed through Helm and ArgoCD |
 
-All three use the `aws-kubeadm-gitops` branch. The active monitoring stack is
-still the manually applied `monitoring-manual` namespace, not the `monitoring`
-Argo CD Application.
+All three use the `aws-kubeadm-gitops` branch. The active monitoring stack
+is managed by the `monitoring` Argo CD Application in the `monitoring`
+namespace. The manual manifests are retained for rollback reference.
 
 GitOps flow:
 
@@ -235,32 +234,20 @@ This archived directory documents the earlier manual deployment approach. It is 
 
 ### Kustomize GitOps Manifests
 
-```text
-deploy/applications/accounts/kustomize/
-```
-
-This is the current GitOps deployment structure.
+The active Accounts deployment uses:
+`deploy/applications/accounts/kustomize/overlays/aws-kubeadm/`.
 
 | Path | Purpose |
 | --- | --- |
-| `deploy/applications/accounts/kustomize/base/` | Shared Kubernetes resources |
-| `deploy/applications/accounts/kustomize/overlays/aws-kubeadm/` | Current AWS kubeadm cluster deployment |
-| `deploy/applications/accounts/kustomize/overlays/dev/` | Development-style overlay |
-| `deploy/applications/accounts/kustomize/overlays/prod/` | Production-style overlay |
+| `deploy/applications/accounts/kustomize/base/` | Shared API and PostgreSQL workloads, ClusterIP Services, and application configuration |
+| `deploy/applications/accounts/kustomize/overlays/aws-kubeadm/` | AWS environment namespace, Ingress, SealedSecret, ServiceMonitor, and image tag |
+| `archive/accounts-kustomize-overlays/` | Historical dev/prod examples; not active deployment environments |
 
-Current base resources:
+The AWS overlay assigns resources to the `accounts` namespace.
+Its `networkpolicy.yaml` is a draft and is not included in the deployment.
 
-| Resource | Purpose |
-| --- | --- |
-| `Namespace` | Creates the `accounts` namespace |
-| `ConfigMap` | Stores non-sensitive app configuration such as `DATABASE_HOST` |
-| `SealedSecret` | Stores encrypted PostgreSQL credentials safely in Git |
-| `Deployment/accounts` | Runs the Account API pods |
-| `Service/accounts` | Internal service for the Account API |
-| `ServiceMonitor/accounts` | Tells Prometheus to scrape the Accounts API `/metrics` endpoint |
-| `Deployment/postgresql` | Runs PostgreSQL for the lab environment |
-| `Service/postgresql` | Internal database service |
-| `Ingress/accounts` | Routes public HTTP/HTTPS traffic to the Account API |
+See the [Kustomize deployment guide](deploy/applications/accounts/kustomize/README.md)
+for the directory structure, rendering command, prerequisites, and known limitations.
 
 ## Secrets Management
 
@@ -389,11 +376,18 @@ histogram_quantile(
 The monitoring stack must be installed before applying the Kustomize overlay
 because `ServiceMonitor` is a Prometheus Operator custom resource.
 
-The currently active monitoring manifests live in
-`deploy/platform/monitoring/manual/` and run in `monitoring-manual`. Grafana
-stores dashboards, contact points, and Grafana-managed alert rules on a 5 GiB
-local `hostPath` PV on `k8s-monitoring-1`. Prometheus still uses `emptyDir`, so
-its historical metrics are lost if the Prometheus Pod is recreated.
+The active monitoring configuration lives in
+`deploy/platform/monitoring/helm/` and is deployed by Argo CD into the
+`monitoring` namespace.
+
+Grafana uses a 5 GiB PVC and Prometheus requests a 20 GiB PVC. Both bind
+to retained hostPath PVs on `k8s-monitoring-1`. Their data survives Pod
+replacement while the underlying node storage remains intact, but this
+setup does not provide automatic storage failover to another node.
+
+Dashboards, Grafana-managed alert rules, and notification contact points
+are provisioned from Git. The manual manifests remain under
+`deploy/platform/monitoring/manual/` for rollback reference.
 
 ## Useful Commands
 
@@ -457,7 +451,7 @@ The project currently demonstrates:
 - Route 53 custom domain integration
 - cert-manager and Let's Encrypt HTTPS certificate automation
 - Prometheus application instrumentation and ServiceMonitor discovery
-- Grafana dashboards and email alerts backed by the active manual monitoring stack
+- Grafana dashboards and email alerts provisioned through the GitOps monitoring stack
 
 ## Future Improvements
 

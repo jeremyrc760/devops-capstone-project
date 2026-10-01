@@ -19,7 +19,7 @@ the Kustomize image tag automatically.
 | --- | --- | --- | --- |
 | `accounts` | `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` | `accounts` | Active Accounts API deployment |
 | `accounts-helm-dev` | `deploy/applications/accounts/helm` | `accounts-helm-dev` | Helm learning/dev deployment |
-| `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Helm monitoring migration target |
+| `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Active monitoring stack managed through Helm and Argo CD |
 
 The Argo CD Application definitions live in
 `deploy/platform/argocd/applications/`. Applying those definitions changes what
@@ -31,43 +31,42 @@ Application resource.
 ```text
 Accounts /metrics -----+
 Node exporters --------+--> Prometheus --> Grafana dashboards
-kube-state-metrics ----+         |              |
-                                 |              +--> Grafana alert rules
-                                 |                       |
-                                 +-----------------------+--> email contact point
+kube-state-metrics ----+                     |
+                                            +--> Grafana alert rules
+                                                      |
+                                                      +--> email notifications
 ```
 
-The active stack is `deploy/platform/monitoring/manual/` in the
-`monitoring-manual` namespace:
+The active stack is deployed from `deploy/platform/monitoring/helm/`
+into the `monitoring` namespace by Argo CD.
 
-- Prometheus scrapes application, node, and Kubernetes object metrics.
-- node-exporter reports host CPU, memory, disk, filesystem, and network data.
-- kube-state-metrics reports Kubernetes object state such as desired/ready replicas and pod phases.
-- Grafana combines those metrics into the Accounts API, Kubernetes, and Node Exporter dashboards.
-- Grafana evaluates the current alert rules and sends email through its configured SMTP settings.
+- Prometheus collects application, node, and Kubernetes object metrics.
+- node-exporter exposes host resource metrics.
+- kube-state-metrics exposes Kubernetes object state.
+- Grafana loads dashboards, alert rules, and contact points from Git.
+- Grafana sends email notifications through its configured SMTP settings.
 
-The separate Helm chart packages `kube-prometheus-stack` for a future move to a
-fully Argo CD-managed monitoring stack. It should not replace the manual stack
-until dashboards, alert rules, contact points, SMTP configuration, and storage
-have been migrated and verified.
+The wrapper chart depends on `kube-prometheus-stack`. Custom templates
+provide Ingress resources, SealedSecrets, local storage, and ConfigMaps
+for dashboards and alerting.
 
-## Repository path cutover
+Grafana uses a 5 GiB PVC. Prometheus requests a 20 GiB PVC.
+Both use retained hostPath PVs tied to `k8s-monitoring-1`.
 
-The live Argo CD Application objects still reference the old repository paths
-until this reorganization is committed and pushed. After pushing, update only
-their source paths so the existing sync-policy settings are preserved:
+The manifests under `deploy/platform/monitoring/manual/` are retained
+for rollback reference.
+
+## Verify tracked repository paths
+
+Run this read-only command to inspect the live Application sources:
 
 ```bash
-kubectl patch application accounts -n argocd --type merge \
-  -p '{"spec":{"source":{"path":"deploy/applications/accounts/kustomize/overlays/aws-kubeadm"}}}'
-
-kubectl patch application accounts-helm-dev -n argocd --type merge \
-  -p '{"spec":{"source":{"path":"deploy/applications/accounts/helm"}}}'
-
-kubectl patch application monitoring -n argocd --type merge \
-  -p '{"spec":{"source":{"path":"deploy/platform/monitoring/helm"}}}'
+kubectl get applications -n argocd \
+  -o custom-columns='NAME:.metadata.name,BRANCH:.spec.source.targetRevision,PATH:.spec.source.path'
 ```
 
-The monitoring patch changes only the repository path. It does not migrate the
-active `monitoring-manual` stack or intentionally enable automated sync for the
-Helm deployment.
+Compare the output with the Application table above. If a source differs,
+review the intended change before updating the live Application.
+
+Renaming an Application YAML file does not rename the Kubernetes
+Application object. The object's identity comes from its metadata.

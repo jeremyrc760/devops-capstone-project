@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgresql
-  namespace: accounts
   labels:
     app.kubernetes.io/name: postgresql
     app.kubernetes.io/part-of: devops-capstone

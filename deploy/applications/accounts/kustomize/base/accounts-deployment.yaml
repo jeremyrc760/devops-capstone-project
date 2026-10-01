@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: accounts
-  namespace: accounts
   labels:
     app.kubernetes.io/name: accounts
     app.kubernetes.io/part-of: devops-capstone

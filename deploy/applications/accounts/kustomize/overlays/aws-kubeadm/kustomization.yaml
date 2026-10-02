@@ -9,7 +9,10 @@ resources:
   - postgres-sealedsecret.yaml
   - accounts-servicemonitor.yaml
   - namespace.yaml
+  - postgres-pvc.yaml
 
+patches:
+  - path: postgres-storage-patch.yaml
 
 images:
   - name: ghcr.io/jeremyrc760/devops-capstone-project

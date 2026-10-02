@@ -1,0 +1,20 @@
+aws-ebs-csi-driver:
+  controller:
+    # Use the IAM instance role attached to worker-1.
+    replicaCount: 1
+    region: us-east-1
+    nodeSelector:
+      kubernetes.io/hostname: k8s-worker-1
+
+  node:
+    # Run the node plugin on Linux nodes, including tainted nodes.
+    enableLinux: true
+    enableWindows: false
+    tolerateAllTaints: true
+
+    # Access EC2 instance metadata through the host network.
+    hostNetwork: true
+
+  # Validate through deployment checks instead of Helm test hooks.
+  helmTester:
+    enabled: false

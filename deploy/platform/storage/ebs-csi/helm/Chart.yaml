@@ -1,0 +1,10 @@
+apiVersion: v2
+name: capstone-ebs-csi
+description: AWS EBS CSI driver for the kubeadm cluster
+type: application
+version: 0.1.0
+
+dependencies:
+  - name: aws-ebs-csi-driver
+    version: "2.65.1"
+    repository: https://kubernetes-sigs.github.io/aws-ebs-csi-driver

@@ -16,4 +16,4 @@ patches:
 
 images:
   - name: ghcr.io/jeremyrc760/devops-capstone-project
-    newTag: sha-bbd213a
+    newTag: sha-e581d28

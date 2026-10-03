@@ -38,6 +38,11 @@ on:
 permissions:
   contents: read
 
+# Keep the newest run for each branch or pull request.
+concurrency:
+  group: accounts-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Job 1: Check source code and run the existing test suite.
   test:
@@ -92,6 +97,9 @@ jobs:
   build-and-push:
     name: Build and publish image
     needs: test
+    # Pass the exact published commit tag to the deployment PR job.
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
 
     # Never publish from PRs. Manual publishing also requires a delivery branch.
     if: >-
@@ -131,10 +139,10 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=ref,event=branch
-            type=sha,prefix=sha-
+            type=sha,prefix=sha-,priority=1000
 
       # Build using the root Dockerfile and publish the generated tags.
-      # Kustomize's newTag is still updated manually after image publication.
+      # The next job proposes this image in a deployment pull request.
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -142,3 +150,88 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # Job 3: Propose a deployment only after the image has been published.
+  update-deployment:
+    name: Create deployment PR
+    needs: build-and-push
+    # Argo CD tracks this branch; main builds must not change this environment.
+    if: github.ref == 'refs/heads/aws-kubeadm-gitops'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      # Start from the current deployment branch, preserving its latest changes.
+      - name: Checkout deployment branch
+        uses: actions/checkout@v4
+        with:
+          ref: aws-kubeadm-gitops
+
+      # Skip an outdated build if another commit reached the branch meanwhile.
+      - name: Check source revision
+        id: revision
+        run: |
+          if [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Branch has moved; skipping this deployment proposal." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Change only the Accounts image tag, retaining YAML comments and layout.
+      - name: Update Kustomize image tag
+        if: steps.revision.outputs.current == 'true'
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["IMAGE_TAG"]
+          if not re.fullmatch(r"sha-[0-9a-f]{7,40}", tag):
+              raise SystemExit(f"Unexpected image tag: {tag}")
+
+          path = Path("deploy/applications/accounts/kustomize/overlays/aws-kubeadm/kustomization.yaml")
+          pattern = r"(?m)(^[ \t]*- name: ghcr\.io/jeremyrc760/devops-capstone-project\s*\n[ \t]*newTag: )[\w.-]+"
+          updated, count = re.subn(pattern, lambda match: match[1] + tag, path.read_text())
+          if count != 1:
+              raise SystemExit("Expected exactly one Accounts image tag; review the YAML structure.")
+          path.write_text(updated)
+          PY
+
+      # Reuse one PR branch; later builds update the same open proposal.
+      # Enable "Allow GitHub Actions to create and approve pull requests" in
+      # Settings > Actions > General. No personal access token is required.
+      # Merge this PR manually to let Argo CD deploy the proposed image.
+      - name: Create or update deployment PR
+        if: steps.revision.outputs.current == 'true'
+        id: deployment-pr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: aws-kubeadm-gitops
+          branch: automation/accounts-image-update
+          add-paths: deploy/applications/accounts/kustomize/overlays/aws-kubeadm/kustomization.yaml
+          commit-message: "deploy: update accounts image to ${{ needs.build-and-push.outputs.image-tag }}"
+          title: "deploy: update accounts image to ${{ needs.build-and-push.outputs.image-tag }}"
+          body: |
+            Update the Accounts image to `${{ needs.build-and-push.outputs.image-tag }}`.
+
+            Source commit: ${{ github.sha }}
+            Successful build: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Tests and image publication completed before this proposal.
+            Review and merge to deploy through Argo CD.
+            This deployment-only change does not trigger another image build.
+
+      # Put the PR link in the workflow summary for easy access.
+      - name: Show deployment PR
+        if: steps.deployment-pr.outputs.pull-request-url != ''
+        env:
+          PR_URL: ${{ steps.deployment-pr.outputs.pull-request-url }}
+        run: echo "Deployment PR — $PR_URL" >> "$GITHUB_STEP_SUMMARY"

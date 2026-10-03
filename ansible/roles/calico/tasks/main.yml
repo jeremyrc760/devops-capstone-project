@@ -87,7 +87,7 @@
       - "--kubeconfig={{ calico_kubeconfig }}"
       - apply
       - -f
-      - -
+      - "-"
     stdin: "{{ lookup('template', 'custom-resources.yaml.j2') }}"
   register: calico_custom_resources_apply
   changed_when: >

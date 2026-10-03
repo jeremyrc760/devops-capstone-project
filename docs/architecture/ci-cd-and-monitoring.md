@@ -2,16 +2,13 @@
 
 ## Accounts delivery flow
 
-1. A developer pushes application code or deployment YAML to GitHub.
-2. `.github/workflows/ci-build.yaml` runs linting and tests for `main` pushes and pull requests.
-3. `.github/workflows/docker-ghcr.yaml` builds and publishes the application image for `main` and `aws-kubeadm-gitops` pushes.
-4. The `accounts` Argo CD Application watches `aws-kubeadm-gitops` at `deploy/applications/accounts/kustomize/overlays/aws-kubeadm`.
-5. Argo CD applies the rendered resources to the `accounts` namespace and self-heals drift.
-6. Kubernetes pulls the GHCR image tag declared by the Kustomize overlay.
+1. `ci-build.yaml` runs lint and tests for eligible application, test, build, and workflow changes on `main` and `aws-kubeadm-gitops`, including PRs targeting either branch.
+2. After tests pass, pushes and manual runs on these branches publish images to GHCR. PR runs do not publish images.
+3. Successful builds on `aws-kubeadm-gitops` create or update a PR changing the Accounts overlay image tag. Builds from `main` do not propose deployment updates.
+4. A maintainer reviews and merges the image update PR into `aws-kubeadm-gitops`.
+5. Argo CD watches that branch at `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` and deploys the declared image.
 
-CI and image publishing are currently separate workflows. A successful image
-build is not gated on the test workflow, and the image workflow does not update
-the Kustomize image tag automatically.
+Documentation and deployment-only pushes do not rebuild images. Manual runs bypass path filters. Argo CD continues tracking `aws-kubeadm-gitops` after changes merge into `main`.
 
 ## Argo CD applications
 
@@ -19,11 +16,23 @@ the Kustomize image tag automatically.
 | --- | --- | --- | --- |
 | `accounts` | `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` | `accounts` | Active Accounts API deployment |
 | `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Active monitoring stack managed through Helm and Argo CD |
+| `ebs-csi` | `deploy/platform/storage/ebs-csi/helm` | `kube-system` | EBS CSI driver and ebs-gp3 StorageClass |
 
 The Argo CD Application definitions live in
 `deploy/platform/argocd/applications/`. Applying those definitions changes what
 Argo CD tracks; committing them alone does not update a manually created
 Application resource.
+
+## Accounts persistent storage
+
+The `ebs-csi` Application installs the driver in `kube-system` and creates the
+cluster-scoped `ebs-gp3` StorageClass. The driver provisions a 10 GiB EBS
+volume for the Accounts `postgresql-data` PVC when the database Pod is
+scheduled. The class uses encryption, `WaitForFirstConsumer`, and `Retain`.
+Pod recreation reuses the PVC; this is not a backup or a highly available database.
+
+The controller runs on `k8s-worker-1` and uses its EC2 IAM role. Prepare that
+role and EC2 metadata access separately before installing on a new cluster.
 
 ## Active monitoring flow
 

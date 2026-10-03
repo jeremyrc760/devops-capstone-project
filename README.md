@@ -92,10 +92,15 @@ This project uses GitHub Actions for CI and image publishing.
 
 | Workflow | Purpose |
 | --- | --- |
-| `.github/workflows/ci-build.yaml` | Runs linting and tests with PostgreSQL service container |
-| `.github/workflows/docker-ghcr.yaml` | Builds and pushes Docker images to GitHub Container Registry |
+| `.github/workflows/ci-build.yaml` | Tests the application, publishes images after tests pass, and proposes deployment image updates through PRs |
 
-The container image is tagged from branch and commit metadata. The AWS kubeadm GitOps deployment currently uses the image from the `aws-kubeadm-gitops` branch.
+1. `ci-build.yaml` runs lint and tests for eligible application, test, build, and workflow changes on `main` and `aws-kubeadm-gitops`, including PRs targeting either branch.
+2. After tests pass, pushes and manual runs on these branches publish images to GHCR. PR runs do not publish images.
+3. Successful builds on `aws-kubeadm-gitops` create or update a PR changing the Accounts overlay image tag. Builds from `main` do not propose deployment updates.
+4. A maintainer reviews and merges the image update PR into `aws-kubeadm-gitops`.
+5. Argo CD watches that branch at `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` and deploys the declared image.
+
+Documentation and deployment-only pushes do not rebuild images. Manual runs bypass path filters. Argo CD continues tracking `aws-kubeadm-gitops` after changes merge into `main`.
 
 The complete delivery and monitoring flow is documented in
 [`docs/architecture/ci-cd-and-monitoring.md`](docs/architecture/ci-cd-and-monitoring.md).
@@ -244,6 +249,8 @@ The active Accounts deployment uses:
 
 The AWS overlay assigns resources to the `accounts` namespace.
 Its `networkpolicy.yaml` is a draft and is not included in the deployment.
+The overlay replaces the base PostgreSQL `emptyDir` with an EBS-backed PVC
+and uses a `Recreate` update strategy for the single database instance.
 
 See the [Kustomize deployment guide](deploy/applications/accounts/kustomize/README.md)
 for the directory structure, rendering command, prerequisites, and known limitations.
@@ -443,7 +450,7 @@ The project currently demonstrates:
 - A self-managed Kubernetes cluster on AWS EC2
 - Calico networking across one control plane and three worker nodes
 - Argo CD GitOps deployment from a dedicated branch and Kustomize overlay
-- PostgreSQL running inside Kubernetes for the lab environment
+- PostgreSQL running inside Kubernetes with a 10 GiB EBS gp3 PVC
 - Sealed Secrets for encrypted Git-based secret management
 - NGINX Ingress Controller for HTTP/HTTPS routing
 - AWS Network Load Balancer as the public entry point
@@ -457,7 +464,7 @@ The project currently demonstrates:
 Potential next steps:
 
 - Move PostgreSQL from in-cluster `Deployment` to AWS RDS PostgreSQL
-- Add persistent storage for the in-cluster PostgreSQL demo
+- Add PostgreSQL backups and test database recovery
 - Manage AWS infrastructure with Terraform
 - Use ExternalDNS to manage Route 53 records from Kubernetes
 - Add application SLO-based Prometheus alerts and a custom Grafana dashboard

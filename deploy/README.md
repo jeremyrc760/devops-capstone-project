@@ -14,7 +14,9 @@ deploy/
     ├── monitoring/
     │   ├── manual/          # stopped rollback stack in monitoring-manual
     │   └── helm/            # active kube-prometheus-stack deployment
-    └── sealed-secrets/      # public sealing certificate
+    ├── sealed-secrets/      # public sealing certificate
+    └── storage/
+        └── ebs-csi/helm/    # EBS CSI driver and ebs-gp3 StorageClass
 ```
 
 `applications/` contains business workloads. `platform/` contains shared
@@ -24,13 +26,13 @@ cluster services used to deploy, secure, and observe those workloads.
 
 Application delivery:
 
-1. GitHub Actions `ci-build.yaml` runs lint and tests for `main` pushes and pull
-   requests.
-2. `docker-ghcr.yaml` builds and pushes the Accounts image for `main` and
-   `aws-kubeadm-gitops`.
-3. The Argo CD Application `accounts` tracks branch `aws-kubeadm-gitops` at
-   `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` and reconciles
-   it into namespace `accounts`.
+1. `ci-build.yaml` runs lint and tests for eligible application, test, build, and workflow changes on `main` and `aws-kubeadm-gitops`, including PRs targeting either branch.
+2. After tests pass, pushes and manual runs on these branches publish images to GHCR. PR runs do not publish images.
+3. Successful builds on `aws-kubeadm-gitops` create or update a PR changing the Accounts overlay image tag. Builds from `main` do not propose deployment updates.
+4. A maintainer reviews and merges the image update PR into `aws-kubeadm-gitops`.
+5. Argo CD watches that branch at `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` and deploys the declared image.
+
+Documentation and deployment-only pushes do not rebuild images. Manual runs bypass path filters. Argo CD continues tracking `aws-kubeadm-gitops` after changes merge into `main`.
 
 Platform monitoring delivery:
 

@@ -34,6 +34,8 @@
       - kubectl
       - "--kubeconfig={{ cert_manager_kubeconfig }}"
       - apply
+      - --server-side
+      - --force-conflicts
       - -f
       - "{{ cert_manager_manifest_url }}"
   register: cert_manager_manifest_apply
@@ -83,7 +85,7 @@
       - "--kubeconfig={{ cert_manager_kubeconfig }}"
       - apply
       - -f
-      - -
+      - "-"
     stdin: |
       ---
       apiVersion: cert-manager.io/v1

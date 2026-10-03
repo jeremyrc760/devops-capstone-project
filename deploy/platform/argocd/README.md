@@ -1,7 +1,7 @@
 # Argo CD Configuration
 
 This directory contains Argo CD access configuration and Application
-definitions for the Accounts service and monitoring platform.
+definitions for Accounts, monitoring, and EBS storage.
 
 Argo CD installation is handled separately by Ansible.
 
@@ -47,22 +47,26 @@ server workload. Ingress TLS requires NGINX, cert-manager, and the
 | --- | --- | --- | --- |
 | `accounts` | `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` | `accounts` | Main Accounts deployment |
 | `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Monitoring platform |
+| `ebs-csi` | `deploy/platform/storage/ebs-csi/helm` | `kube-system` | EBS CSI driver and StorageClass |
 
-Both Application definitions track the `aws-kubeadm-gitops` branch.
+All three Application definitions track the `aws-kubeadm-gitops` branch.
 
-Accounts uses Kustomize. Monitoring uses Helm to render its resources.
-Argo CD manages synchronization of both.
+Accounts uses Kustomize. Monitoring and EBS CSI use Helm to render resources.
+Argo CD manages synchronization of all three.
 
 ## Sync Policies
 
 - `accounts`: automated synchronization and self-healing; automatic pruning
   is not enabled.
 - `monitoring`: automated synchronization, self-healing, and pruning.
+- `ebs-csi`: automated synchronization and self-healing; automatic pruning
+  is not enabled.
 
 Pruning can delete managed cluster resources that are removed from the
 rendered Git configuration.
 
-Both definitions include a resource deletion finalizer. Deleting an
+The Accounts and monitoring definitions include a resource deletion finalizer;
+the EBS CSI definition does not. Deleting an
 Application can cascade to its managed resources; review the intended
 deletion behavior before retiring an application.
 
@@ -80,7 +84,10 @@ file after review. Avoid applying the entire directory when changing only
 one Application.
 
 The monitoring stack must provide the ServiceMonitor CRD before a fresh
-Accounts deployment containing a ServiceMonitor can succeed.
+Accounts deployment containing a ServiceMonitor can succeed. The EBS CSI
+driver and `ebs-gp3` StorageClass are required for its PostgreSQL PVC.
+Prepare the controller node IAM role and metadata access separately;
+the current EBS CSI Helm values select `k8s-worker-1`.
 
 ## Check Application Status
 

@@ -1,0 +1,7 @@
+---
+- name: Verify SSH connectivity to Kubernetes nodes
+  hosts: kubernetes
+  gather_facts: false
+  tasks:
+    - name: Ping node through Ansible
+      ansible.builtin.ping:

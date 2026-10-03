@@ -1,45 +1,237 @@
-name: CI Build
+# Display name shown in GitHub Actions.
+name: Accounts CI and Image Publish
+
+# Run automatically for application, test, build, or workflow changes.
 on:
   push:
     branches:
       - main
+      - aws-kubeadm-gitops
+    # Documentation and deployment-only changes do not rebuild the image.
+    paths:
+      - "service/**"
+      - "tests/**"
+      - "requirements*.txt"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "setup.cfg"
+      - ".github/workflows/ci-build.yaml"
+
+  # These branches are PR targets, not the source branches.
   pull_request:
     branches:
       - main
+      - aws-kubeadm-gitops
+    paths:
+      - "service/**"
+      - "tests/**"
+      - "requirements*.txt"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "setup.cfg"
+      - ".github/workflows/ci-build.yaml"
+
+  # Allow manual runs; path filters do not apply to manual runs.
+  workflow_dispatch:
+
+# Use read-only repository access unless a job explicitly needs more.
+permissions:
+  contents: read
+
+# Keep the newest run for each branch or pull request.
+concurrency:
+  group: accounts-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  # Job 1: Check source code and run the existing test suite.
+  test:
+    name: Lint and test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Match the Python version in the application Dockerfile.
     container: python:3.9-slim
 
     services:
+      # This temporary database is isolated from the Kubernetes database.
       postgres:
-        image: postgres:alpine
-        ports:
-          - 5432:5432
+        image: postgres:16-alpine
+        # Credentials are used only inside this disposable test environment.
         env:
+          POSTGRES_USER: postgres
           POSTGRES_PASSWORD: pgs3cr3t
           POSTGRES_DB: testdb
+        # Wait until PostgreSQL accepts connections before running steps.
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d testdb"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     steps:
+      # Download the source revision associated with this workflow run.
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
+      # Install application, linting, and testing dependencies.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip wheel
           pip install -r requirements.txt
 
+      # Check critical errors first, then code style and complexity.
+      # A failed command stops the job and prevents image publishing.
       - name: Lint with flake8
         run: |
           flake8 service --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 service --count --max-complexity=10 --max-line-length=127 --statistics
-    
-      - name: Run unit tests with nose
+
+      # Run the existing nose tests with coverage settings from setup.cfg.
+      - name: Run unit tests
         run: nosetests
         env:
-          DATABASE_URI: "postgresql://postgres:pgs3cr3t@postgres:5432/testdb"
+          # Container jobs reach PostgreSQL by its service name, "postgres".
+          DATABASE_URI: postgresql://postgres:pgs3cr3t@postgres:5432/testdb
+
+  # Job 2: Build and publish only after the test job succeeds.
+  build-and-push:
+    name: Build and publish image
+    needs: test
+    # Pass the exact published commit tag to the deployment PR job.
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+
+    # Never publish from PRs. Manual publishing also requires a delivery branch.
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/aws-kubeadm-gitops')
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Only this job may upload images to GitHub Container Registry.
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # Jobs have separate workspaces, so download the source again.
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Prepare the Docker Buildx builder.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Authenticate using GitHub's temporary token, not a personal password.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Generate the image name, branch tag, commit tag, and labels.
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-,priority=1000
+
+      # Build using the root Dockerfile and publish the generated tags.
+      # The next job proposes this image in a deployment pull request.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # Job 3: Propose a deployment only after the image has been published.
+  update-deployment:
+    name: Create deployment PR
+    needs: build-and-push
+    # Argo CD tracks this branch; main builds must not change this environment.
+    if: github.ref == 'refs/heads/aws-kubeadm-gitops'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      # Start from the current deployment branch, preserving its latest changes.
+      - name: Checkout deployment branch
+        uses: actions/checkout@v4
+        with:
+          ref: aws-kubeadm-gitops
+
+      # Skip an outdated build if another commit reached the branch meanwhile.
+      - name: Check source revision
+        id: revision
+        run: |
+          if [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Branch has moved; skipping this deployment proposal." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Change only the Accounts image tag, retaining YAML comments and layout.
+      - name: Update Kustomize image tag
+        if: steps.revision.outputs.current == 'true'
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["IMAGE_TAG"]
+          if not re.fullmatch(r"sha-[0-9a-f]{7,40}", tag):
+              raise SystemExit(f"Unexpected image tag: {tag}")
+
+          path = Path("deploy/applications/accounts/kustomize/overlays/aws-kubeadm/kustomization.yaml")
+          pattern = r"(?m)(^[ \t]*- name: ghcr\.io/jeremyrc760/devops-capstone-project\s*\n[ \t]*newTag: )[\w.-]+"
+          updated, count = re.subn(pattern, lambda match: match[1] + tag, path.read_text())
+          if count != 1:
+              raise SystemExit("Expected exactly one Accounts image tag; review the YAML structure.")
+          path.write_text(updated)
+          PY
+
+      # Reuse one PR branch; later builds update the same open proposal.
+      # Enable "Allow GitHub Actions to create and approve pull requests" in
+      # Settings > Actions > General. No personal access token is required.
+      # Merge this PR manually to let Argo CD deploy the proposed image.
+      - name: Create or update deployment PR
+        if: steps.revision.outputs.current == 'true'
+        id: deployment-pr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: aws-kubeadm-gitops
+          branch: automation/accounts-image-update
+          add-paths: deploy/applications/accounts/kustomize/overlays/aws-kubeadm/kustomization.yaml
+          commit-message: "deploy: update accounts image to ${{ needs.build-and-push.outputs.image-tag }}"
+          title: "deploy: update accounts image to ${{ needs.build-and-push.outputs.image-tag }}"
+          body: |
+            Update the Accounts image to `${{ needs.build-and-push.outputs.image-tag }}`.
+
+            Source commit: ${{ github.sha }}
+            Successful build: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Tests and image publication completed before this proposal.
+            Review and merge to deploy through Argo CD.
+            This deployment-only change does not trigger another image build.
+
+      # Put the PR link in the workflow summary for easy access.
+      - name: Show deployment PR
+        if: steps.deployment-pr.outputs.pull-request-url != ''
+        env:
+          PR_URL: ${{ steps.deployment-pr.outputs.pull-request-url }}
+        run: echo "Deployment PR — $PR_URL" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,47 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: accounts-api-isolation
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: accounts
+  policyTypes:
+    - Ingress
+  ingress:
+    # 1. 仅放行 ingress-nginx 命名空间的流量打入 8080 端口
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    # 2. 仅放行 monitoring 命名空间抓取指标 (Prometheus)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgresql-db-protection
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+  policyTypes:
+    - Ingress
+  ingress:
+    # 仅允许携带 accounts 标签的 Pod 连接 5432 端口
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: accounts
+      ports:
+        - protocol: TCP
+          port: 5432

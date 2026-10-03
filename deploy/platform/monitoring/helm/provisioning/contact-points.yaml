@@ -1,0 +1,11 @@
+apiVersion: 1
+contactPoints:
+    - orgId: 1
+      name: email-mcmaster
+      receivers:
+        - uid: email-mcmaster
+          type: email
+          settings:
+            addresses: yinr19@mcmaster.ca
+            singleEmail: false
+          disableResolveMessage: false

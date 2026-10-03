@@ -1,0 +1,9 @@
+---
+sealed_secrets_version: v0.39.1
+sealed_secrets_namespace: kube-system
+sealed_secrets_controller_name: sealed-secrets-controller
+sealed_secrets_manifest_url: "https://github.com/bitnami-labs/sealed-secrets/releases/download/{{ sealed_secrets_version }}/controller.yaml"
+
+sealed_secrets_kubeconfig: /etc/kubernetes/admin.conf
+sealed_secrets_wait_timeout: 300s
+sealed_secrets_crd_name: sealedsecrets.bitnami.com

@@ -97,12 +97,11 @@ spec:
       - name: SCRIPT
         value: |
           echo "Updating manifests..."
-          sed -i "s|IMAGE_NAME_HERE|$(params.build-image)|g" deploy/deployment.yaml
-          cat deploy/deployment.yaml
+          sed -i "s|IMAGE_NAME_HERE|$(params.build-image)|g" archive/ibm-capstone-legacy/deploy/deployment.yaml
+          cat archive/ibm-capstone-legacy/deploy/deployment.yaml
           echo "Deploying to openshift..."
-          oc apply -f deploy/
+          oc apply -f archive/ibm-capstone-legacy/deploy/
           oc get pods -l app=accounts
       runAfter:
         - build
 
-   

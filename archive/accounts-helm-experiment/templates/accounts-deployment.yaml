@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounts
+  namespace: {{ include "accounts.namespace" . }}
+  labels:
+    {{- include "accounts.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.accounts.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "accounts.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "accounts.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/part-of: devops-capstone
+    spec:
+      initContainers:
+        - name: wait-for-postgresql
+          image: {{ printf "%s:%s" .Values.postgresql.image.repository .Values.postgresql.image.tag | quote }}
+          command:
+            - /bin/sh
+            - -c
+            - until pg_isready -h "$DATABASE_HOST" -U "$DATABASE_USER" -d "$DATABASE_NAME"; do echo waiting for postgresql; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: accounts-config
+          env:
+            - name: DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-name
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-user
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-password
+      containers:
+        - name: accounts
+          image: {{ printf "%s:%s" .Values.accounts.image.repository .Values.accounts.image.tag | quote }}
+          imagePullPolicy: {{ .Values.accounts.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: accounts-config
+          env:
+            - name: DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-name
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-user
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: database-password
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.accounts.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.accounts.probes.readiness.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.accounts.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.accounts.probes.liveness.periodSeconds }}

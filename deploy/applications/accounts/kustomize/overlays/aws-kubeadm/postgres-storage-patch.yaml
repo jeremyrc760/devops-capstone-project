@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+spec:
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      containers:
+        - name: postgresql
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+      volumes:
+        - name: postgresql-data
+          emptyDir: null
+          persistentVolumeClaim:
+            claimName: postgresql-data

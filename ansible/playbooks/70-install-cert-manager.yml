@@ -1,0 +1,7 @@
+---
+- name: Install cert-manager
+  hosts: control_plane
+  become: true
+  gather_facts: true
+  roles:
+    - cert_manager

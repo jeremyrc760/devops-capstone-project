@@ -1,0 +1,6 @@
+---
+- name: Apply common Kubernetes node prerequisites
+  hosts: kubernetes
+  become: true
+  roles:
+    - common

@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: grafana-data-pv
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: manual
+    app.kubernetes.io/part-of: manual-monitoring
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: grafana-local
+  volumeMode: Filesystem
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - k8s-monitoring-1
+  hostPath:
+    path: /var/lib/grafana-data
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-storage
+  namespace: monitoring-manual
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: manual
+    app.kubernetes.io/part-of: manual-monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: grafana-local
+  volumeName: grafana-data-pv
+  resources:
+    requests:
+      storage: 5Gi

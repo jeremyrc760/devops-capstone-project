@@ -1,0 +1,42 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: accounts
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/part-of: devops-capstone
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-http01
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - customer-account.api.jeremycloudlabs.com
+      secretName: accounts-tls
+  rules:
+    - host: customer-account.api.jeremycloudlabs.com
+      http:
+        paths:
+          - path: /
+            pathType: Exact
+            backend:
+              service:
+                name: accounts
+                port:
+                  number: 8080
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: accounts
+                port:
+                  number: 8080
+          - path: /accounts
+            pathType: Prefix
+            backend:
+              service:
+                name: accounts
+                port:
+                  number: 8080

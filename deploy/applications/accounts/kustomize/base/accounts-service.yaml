@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/part-of: devops-capstone
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: accounts
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

@@ -1,0 +1,106 @@
+---
+- name: Validate inventory has exactly one control plane
+  ansible.builtin.assert:
+    that:
+      - groups['control_plane'] is defined
+      - groups['control_plane'] | length == 1
+    fail_msg: "Expected exactly one host in the control_plane inventory group."
+  run_once: true
+
+- name: Check kubeadm is installed
+  ansible.builtin.command: kubeadm version -o short
+  register: worker_kubeadm_version
+  changed_when: false
+
+- name: Check kubelet is installed
+  ansible.builtin.command: kubelet --version
+  register: worker_kubelet_version
+  changed_when: false
+
+- name: Check containerd service state
+  ansible.builtin.command: systemctl is-active containerd
+  register: worker_containerd_state
+  changed_when: false
+  failed_when: false
+
+- name: Check swap state
+  ansible.builtin.command: swapon --show --noheadings
+  register: worker_swap_state
+  changed_when: false
+  failed_when: false
+
+- name: Validate worker prerequisites
+  ansible.builtin.assert:
+    that:
+      - worker_containerd_state.stdout == "active"
+      - worker_swap_state.stdout == ""
+    fail_msg: "Worker prerequisites are not ready. Run playbooks/10-bootstrap-common.yml before playbooks/30-join-workers.yml."
+
+- name: Check whether worker is already joined
+  ansible.builtin.stat:
+    path: "{{ worker_kubelet_conf_path }}"
+  register: worker_kubelet_conf
+
+- name: Report already joined worker
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }} already has {{ worker_kubelet_conf_path }}; skipping kubeadm join."
+  when: worker_kubelet_conf.stat.exists
+
+- name: Check join command exists on control plane
+  ansible.builtin.stat:
+    path: "{{ worker_join_command_source_path }}"
+  delegate_to: "{{ worker_join_command_source_host }}"
+  register: worker_join_command_source
+  when: not worker_kubelet_conf.stat.exists
+
+- name: Validate join command is available
+  ansible.builtin.assert:
+    that:
+      - worker_join_command_source.stat.exists
+      - worker_join_command_source.stat.isreg
+    fail_msg: "Worker join command was not found on the control plane. Run playbooks/20-init-control-plane.yml first."
+  when: not worker_kubelet_conf.stat.exists
+
+- name: Read join command from control plane
+  ansible.builtin.slurp:
+    src: "{{ worker_join_command_source_path }}"
+  delegate_to: "{{ worker_join_command_source_host }}"
+  register: worker_join_command_script
+  when: not worker_kubelet_conf.stat.exists
+  no_log: true
+
+- name: Create root-only kubeadm directory on worker
+  ansible.builtin.file:
+    path: "{{ worker_join_command_local_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: not worker_kubelet_conf.stat.exists
+
+- name: Copy join command to worker
+  ansible.builtin.copy:
+    content: "{{ worker_join_command_script.content | b64decode }}"
+    dest: "{{ worker_join_command_local_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: not worker_kubelet_conf.stat.exists
+  no_log: true
+
+- name: Join worker to Kubernetes cluster
+  ansible.builtin.command:
+    argv:
+      - bash
+      - "{{ worker_join_command_local_path }}"
+    creates: "{{ worker_kubelet_conf_path }}"
+  register: worker_join_result
+  when: not worker_kubelet_conf.stat.exists
+  no_log: true
+
+- name: Report joined worker
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }} joined the Kubernetes cluster."
+  when:
+    - not worker_kubelet_conf.stat.exists
+    - worker_join_result is changed

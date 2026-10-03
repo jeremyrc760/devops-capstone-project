@@ -4,10 +4,12 @@ Package for the application models and service routes
 This module creates and configures the Flask app and sets up the logging
 and SQL database
 """
+import os
 import sys
 from flask import Flask
 from service import config
 from service.common import log_handlers
+from service.metrics import init_metrics
 from flask_talisman import Talisman
 from flask_cors import CORS
 
@@ -16,7 +18,8 @@ from flask_cors import CORS
 app = Flask(__name__)
 app.config.from_object(config)
 
-talisman = Talisman(app)
+force_https = os.getenv("FORCE_HTTPS", "true").lower() == "true"
+talisman = Talisman(app, force_https=force_https)
 CORS(app)
 
 # Import the routes After the Flask app is created
@@ -39,5 +42,7 @@ except Exception as error:  # pylint: disable=broad-except
     app.logger.critical("%s: Cannot continue", error)
     # gunicorn requires exit code 4 to stop spawning workers when they die
     sys.exit(4)
+
+init_metrics(app)
 
 app.logger.info("Service initialized!")

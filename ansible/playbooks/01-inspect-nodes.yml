@@ -1,0 +1,70 @@
+---
+- name: Inspect Kubernetes node baseline
+  hosts: kubernetes
+  gather_facts: true
+  tasks:
+    - name: Check hostname
+      ansible.builtin.command: hostname
+      register: node_hostname
+      changed_when: false
+
+    - name: Check primary private IP
+      ansible.builtin.command: hostname -I
+      register: node_ips
+      changed_when: false
+
+    - name: Check OS version
+      ansible.builtin.command: lsb_release -ds
+      register: os_version
+      changed_when: false
+      failed_when: false
+
+    - name: Check containerd version
+      ansible.builtin.command: containerd --version
+      register: containerd_version
+      changed_when: false
+      failed_when: false
+
+    - name: Check kubeadm version
+      ansible.builtin.command: kubeadm version -o short
+      register: kubeadm_version
+      changed_when: false
+      failed_when: false
+
+    - name: Check kubectl client version
+      ansible.builtin.command: kubectl version --client=true
+      register: kubectl_version
+      changed_when: false
+      failed_when: false
+
+    - name: Check containerd service state
+      ansible.builtin.command: systemctl is-active containerd
+      register: containerd_state
+      changed_when: false
+      failed_when: false
+
+    - name: Check kubelet service state
+      ansible.builtin.command: systemctl is-active kubelet
+      register: kubelet_state
+      changed_when: false
+      failed_when: false
+
+    - name: Check swap state
+      ansible.builtin.command: swapon --show --noheadings
+      register: swap_state
+      changed_when: false
+      failed_when: false
+
+    - name: Show node inspection summary
+      ansible.builtin.debug:
+        msg:
+          - "inventory_host: {{ inventory_hostname }}"
+          - "hostname: {{ node_hostname.stdout }}"
+          - "private_ips: {{ node_ips.stdout }}"
+          - "os: {{ os_version.stdout | default('unknown', true) }}"
+          - "containerd: {{ containerd_version.stdout | default('not installed', true) }}"
+          - "kubeadm: {{ kubeadm_version.stdout | default('not installed', true) }}"
+          - "kubectl: {{ kubectl_version.stdout_lines | default(['not installed'], true) | first }}"
+          - "containerd_service: {{ containerd_state.stdout | default('unknown', true) }}"
+          - "kubelet_service: {{ kubelet_state.stdout | default('unknown', true) }}"
+          - "swap: {{ 'disabled' if swap_state.stdout == '' else swap_state.stdout }}"

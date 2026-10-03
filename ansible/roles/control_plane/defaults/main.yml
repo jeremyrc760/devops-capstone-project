@@ -1,0 +1,10 @@
+---
+kubeadm_pod_network_cidr: "192.168.0.0/16"
+kubeadm_apiserver_advertise_address: "{{ ansible_default_ipv4.address }}"
+
+control_plane_kubeconfig_owner: "{{ ansible_user | default('ubuntu') }}"
+control_plane_kubeconfig_home: "/home/{{ control_plane_kubeconfig_owner }}"
+
+control_plane_join_command_dir: /root/kubeadm
+control_plane_join_command_path: "{{ control_plane_join_command_dir }}/join-workers.sh"
+control_plane_refresh_join_command: false

@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: accounts
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/part-of: devops-capstone
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: accounts
+      app.kubernetes.io/part-of: devops-capstone
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

@@ -1,0 +1,8 @@
+accounts:
+  replicaCount: 1
+  service:
+    type: NodePort
+    nodePort: 32080
+
+ingress:
+  enabled: false

@@ -5,6 +5,7 @@ namespace: accounts
 
 resources:
   - ../../base
+  - accounts-hpa.yaml
   - accounts-ingress.yaml
   - postgres-sealedsecret.yaml
   - accounts-servicemonitor.yaml

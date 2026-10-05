@@ -1,0 +1,22 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/part-of: devops-capstone
+spec:
+  # Keep the existing two replicas available; scale out only when CPU demand rises.
+  minReplicas: 2
+  maxReplicas: 4
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: accounts
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

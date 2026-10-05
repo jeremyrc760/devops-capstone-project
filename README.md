@@ -144,6 +144,7 @@ The self-managed Kubernetes cluster runs inside a dedicated AWS VPC.
 | Route Table | Routes `0.0.0.0/0` to the Internet Gateway and VPC CIDR locally |
 | Security Groups | Controls SSH, NodePort, HTTP, and HTTPS access |
 | EC2 instances | One control plane, two application workers, and one monitoring worker |
+| EC2 IAM role | Grants the EBS CSI controller permission to create and attach EBS volumes |
 | Network Load Balancer | Stable public entry point for HTTP/HTTPS traffic |
 | Route 53 | DNS record for the API domain |
 
@@ -196,8 +197,9 @@ Current Argo CD applications:
 | --- | --- | --- | --- |
 | `accounts` | `deploy/applications/accounts/kustomize/overlays/aws-kubeadm` | `accounts` | Active Accounts API deployment |
 | `monitoring` | `deploy/platform/monitoring/helm` | `monitoring` | Active monitoring stack managed through Helm and Argo CD |
+| `ebs-csi` | `deploy/platform/storage/ebs-csi/helm` | `kube-system` | AWS EBS CSI driver and `ebs-gp3` StorageClass |
 
-Both use the `aws-kubeadm-gitops` branch. The active monitoring stack
+All three use the `aws-kubeadm-gitops` branch. The active monitoring stack
 is managed by the `monitoring` Argo CD Application in the `monitoring`
 namespace. The manual manifests are retained for rollback reference.
 

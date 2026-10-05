@@ -38,7 +38,9 @@ Copy the example inventory:
 cp inventories/aws-kubeadm/hosts.example.ini inventories/aws-kubeadm/hosts.ini
 ```
 
-Edit `inventories/aws-kubeadm/hosts.ini` with the current EC2 public IPs, private IPs, SSH user, and SSH key path. This file should stay local because it contains environment-specific connection details.
+Edit `inventories/aws-kubeadm/hosts.ini` with the current EC2 public IPs, private IPs, SSH user, and SSH key path. This file should stay local because it contains environment-specific connection details. The monitoring node belongs in the `monitoring` group as well as the `kubernetes` parent group.
+
+EC2 public IPs can change after an instance is stopped and started. When that happens, update the ignored local inventory, verify the instance identity in AWS, and make one interactive SSH connection to accept its new host key before running Ansible. Do not disable SSH host-key checking globally.
 
 ## Execution Order
 
@@ -66,9 +68,17 @@ This playbook is read-only.
 ansible-playbook playbooks/10-bootstrap-common.yml
 ```
 
-Installs base packages, loads Kubernetes kernel modules, configures sysctl networking values, and disables swap.
+Installs base packages, loads Kubernetes kernel modules, configures sysctl networking values, disables swap, pins the Kubernetes package version, and enables containerd and kubelet.
 
-Because the current cluster was already configured manually, this playbook should mostly confirm or standardize the existing state.
+For a new node, the role configures the Kubernetes package repository and initializes containerd with the systemd cgroup driver. For an existing node, it preserves a working Kubernetes APT repository and `/etc/containerd/config.toml`; it does not overwrite them or restart containerd unless this role changed its configuration. It also writes `preserve_hostname: true` so cloud-init does not undo the inventory hostname after an EC2 reboot.
+
+Validate the intended changes before applying them:
+
+```bash
+ansible-playbook playbooks/10-bootstrap-common.yml --check --diff
+```
+
+The current four-node lab was validated with this command at `changed=0`, `failed=0`, and `unreachable=0`. Re-running the playbook against already compliant nodes likewise returns `changed=0`, demonstrating idempotency.
 
 ### 20 - Control Plane Initialization
 
@@ -173,3 +183,4 @@ This playbook does not create or modify the AWS Network Load Balancer, target gr
 | `k8s-control-plane-1` | Kubernetes control plane |
 | `k8s-worker-1` | Kubernetes worker |
 | `k8s-worker-2` | Kubernetes worker |
+| `k8s-monitoring-1` | Dedicated monitoring node |

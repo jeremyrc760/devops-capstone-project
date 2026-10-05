@@ -1,0 +1,117 @@
+---
+- name: Assert exactly one control plane host is configured
+  ansible.builtin.assert:
+    that:
+      - groups["control_plane"] | length == 1
+    fail_msg: "Expected exactly one host in the control_plane inventory group."
+  run_once: true
+
+- name: Check admin kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ metrics_server_kubeconfig }}"
+  register: metrics_server_admin_conf
+
+- name: Validate control plane is initialized
+  ansible.builtin.assert:
+    that:
+      - metrics_server_admin_conf.stat.exists
+      - metrics_server_admin_conf.stat.isreg
+    fail_msg: "Control plane is not initialized yet. Run playbooks/20-init-control-plane.yml before playbooks/90-install-metrics-server.yml."
+
+- name: Check whether Metrics Server exists
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ metrics_server_kubeconfig }}"
+      - -n
+      - "{{ metrics_server_namespace }}"
+      - get
+      - deployment
+      - "{{ metrics_server_deployment_name }}"
+  register: metrics_server_deployment
+  changed_when: false
+  failed_when: false
+
+- name: Apply Metrics Server manifest when it is absent
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ metrics_server_kubeconfig }}"
+      - apply
+      - -f
+      - "{{ metrics_server_manifest_url }}"
+  register: metrics_server_manifest_apply
+  changed_when: >
+    'created' in metrics_server_manifest_apply.stdout
+    or 'configured' in metrics_server_manifest_apply.stdout
+  when: metrics_server_deployment.rc != 0
+
+- name: Read Metrics Server container arguments
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ metrics_server_kubeconfig }}"
+      - -n
+      - "{{ metrics_server_namespace }}"
+      - get
+      - deployment
+      - "{{ metrics_server_deployment_name }}"
+      - -o
+      - "jsonpath={.spec.template.spec.containers[0].args[*]}"
+  register: metrics_server_container_args
+  changed_when: false
+
+- name: Allow Metrics Server to scrape this lab's kubelets
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ metrics_server_kubeconfig }}"
+      - -n
+      - "{{ metrics_server_namespace }}"
+      - patch
+      - deployment
+      - "{{ metrics_server_deployment_name }}"
+      - --type=json
+      - -p
+      - '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+  register: metrics_server_tls_patch
+  changed_when: "'patched' in metrics_server_tls_patch.stdout"
+  when:
+    - metrics_server_kubelet_insecure_tls | bool
+    - "'--kubelet-insecure-tls' not in metrics_server_container_args.stdout"
+
+- name: Wait for Metrics Server rollout after configuration changes
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ metrics_server_kubeconfig }}"
+      - -n
+      - "{{ metrics_server_namespace }}"
+      - rollout
+      - status
+      - "deployment/{{ metrics_server_deployment_name }}"
+      - "--timeout={{ metrics_server_wait_timeout }}"
+  changed_when: false
+  when:
+    - metrics_server_manifest_apply is changed or metrics_server_tls_patch is changed
+
+- name: Wait for node resource metrics
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - "--kubeconfig={{ metrics_server_kubeconfig }}"
+      - top
+      - nodes
+      - --no-headers
+  register: metrics_server_node_metrics
+  changed_when: false
+  retries: "{{ metrics_server_metrics_retries }}"
+  delay: "{{ metrics_server_metrics_retry_delay }}"
+  until: metrics_server_node_metrics.rc == 0
+
+- name: Report Metrics Server state
+  ansible.builtin.debug:
+    msg:
+      - "Metrics Server manifest: {{ metrics_server_manifest_url }}"
+      - "kubelet-insecure-tls enabled: {{ metrics_server_kubelet_insecure_tls }}"
+      - "Node metrics: {{ metrics_server_node_metrics.stdout }}"

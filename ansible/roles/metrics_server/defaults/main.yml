@@ -1,0 +1,12 @@
+---
+metrics_server_version: v0.9.0
+metrics_server_namespace: kube-system
+metrics_server_deployment_name: metrics-server
+metrics_server_kubeconfig: /etc/kubernetes/admin.conf
+metrics_server_wait_timeout: 180s
+metrics_server_metrics_retries: 12
+metrics_server_metrics_retry_delay: 10
+
+# This kubeadm lab does not issue kubelet serving certificates with node IP SANs.
+metrics_server_kubelet_insecure_tls: true
+metrics_server_manifest_url: "https://github.com/kubernetes-sigs/metrics-server/releases/download/{{ metrics_server_version }}/components.yaml"

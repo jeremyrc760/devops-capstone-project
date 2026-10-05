@@ -22,6 +22,7 @@ Ansible currently verifies SSH access, inspects node state, enforces common kube
 | `playbooks/60-install-sealed-secrets.yml` | Installs the Sealed Secrets controller from the control plane |
 | `playbooks/70-install-cert-manager.yml` | Installs cert-manager and optionally creates the HTTP-01 ClusterIssuer |
 | `playbooks/80-install-nginx-ingress.yml` | Installs the NGINX Ingress Controller from the control plane |
+| `playbooks/90-install-metrics-server.yml` | Installs Metrics Server for `kubectl top` and CPU-based HPA |
 | `roles/` | Reusable task logic called by the playbooks |
 
 Run commands from this directory so `ansible.cfg` is automatically used:
@@ -175,6 +176,18 @@ Default NGINX Ingress settings:
 | `nginx_ingress_https_node_port` | `32086` | NodePort expected by the current AWS NLB HTTPS target group |
 
 This playbook does not create or modify the AWS Network Load Balancer, target groups, listeners, Route 53 records, or security groups. Those are infrastructure resources and should be managed separately, preferably with Terraform once the design is stable.
+
+### 90 - Metrics Server Installation
+
+```bash
+ansible-playbook playbooks/90-install-metrics-server.yml
+```
+
+Metrics Server provides the resource metrics used by `kubectl top` and the
+Accounts CPU-based HPA. This kubeadm lab enables `--kubelet-insecure-tls`
+because the current kubelet serving certificates do not include node IP SANs.
+For a production cluster, issue properly signed kubelet serving certificates
+instead of disabling this TLS verification.
 
 ## Current Nodes
 

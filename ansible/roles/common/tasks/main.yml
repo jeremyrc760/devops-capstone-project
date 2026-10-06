@@ -1,4 +1,17 @@
 ---
+- name: Preserve the Ansible-managed hostname across EC2 reboots
+  ansible.builtin.copy:
+    dest: /etc/cloud/cloud.cfg.d/99-preserve-hostname.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      preserve_hostname: true
+
+- name: Set node hostname from Ansible inventory
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+
 - name: Install common operating system packages
   ansible.builtin.apt:
     name:
@@ -6,6 +19,7 @@
       - ca-certificates
       - curl
       - gpg
+      - python3-debian
       - software-properties-common
     state: present
     update_cache: true
@@ -50,3 +64,112 @@
     path: /etc/fstab
     regexp: '^([^#].*\sswap\s.*)$'
     replace: '# \1'
+
+- name: Ensure APT keyring directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Preserve the kubernetes repository already configured on existing nodes.
+- name: Check for an existing Kubernetes repository
+  ansible.builtin.stat:
+    path: /etc/apt/sources.list.d/kubernetes.list
+  register: kubernetes_existing_repository
+
+- name: Download Kubernetes repository key
+  ansible.builtin.get_url:
+    url: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_minor_version }}/deb/Release.key"
+    dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+    owner: root
+    group: root
+    mode: "0644"
+  when: not kubernetes_existing_repository.stat.exists
+
+- name: Configure Kubernetes APT repository
+  ansible.builtin.deb822_repository:
+    name: kubernetes
+    types:
+      - deb
+    uris:
+      - "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_minor_version }}/deb/"
+    suites:
+      - "/"
+    signed_by: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+    state: present
+  when: not kubernetes_existing_repository.stat.exists
+
+- name: Install containerd and Kubernetes components
+  ansible.builtin.apt:
+    name:
+      - containerd
+      - "kubelet={{ kubernetes_package_version}}"
+      - "kubeadm={{ kubernetes_package_version}}"
+      - "kubectl={{ kubernetes_package_version}}"
+    state: present
+    update_cache: true
+    # Reject package downgrades during normal node bootstrap.
+    allow_downgrade: false
+
+
+- name: Hold Kubernetes package versions
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: Ensure containerd configuration directory exists
+  ansible.builtin.file:
+    path: /etc/containerd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Preserve existing configuration on manually configured nodes.
+- name: Check whether containerd configuration exists
+  ansible.builtin.stat:
+    path: /etc/containerd/config.toml
+  register: containerd_config_file
+
+# Generate a configuration only when initializing an unconfigured node.
+- name: Generate default containerd configuration
+  ansible.builtin.command: containerd config default
+  register: containerd_default_config
+  changed_when: false
+  when: not containerd_config_file.stat.exists
+
+- name: Initialize containerd with systemd cgroups
+  ansible.builtin.copy:
+    dest: /etc/containerd/config.toml
+    owner: root
+    group: root
+    mode: "0644"
+    # Do not overwrite an existing configuration.
+    force: false
+    content: "{{ containerd_default_config.stdout | regex_replace('SystemdCgroup = false', 'SystemdCgroup = true') }}\n"
+  register: containerd_config
+  when: not containerd_config_file.stat.exists
+
+- name: Enable and start containerd
+  ansible.builtin.systemd:
+    name: containerd
+    enabled: true
+    # Start the service only if it is not already running.
+    state: started
+
+- name: Restart containerd after configuration changes
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+  when: containerd_config.changed
+
+- name: Enable kubelet
+  ansible.builtin.systemd:
+    name: kubelet
+    enabled: true

@@ -35,12 +35,15 @@ class TestAccount(unittest.TestCase):
 
     def setUp(self):
         """This runs before each test"""
+        self.app_context = app.app_context()
+        self.app_context.push()
         db.session.query(Account).delete()  # clean up the last tests
         db.session.commit()
 
     def tearDown(self):
         """This runs after each test"""
         db.session.remove()
+        self.app_context.pop()
 
     ######################################################################
     #  T E S T   C A S E S

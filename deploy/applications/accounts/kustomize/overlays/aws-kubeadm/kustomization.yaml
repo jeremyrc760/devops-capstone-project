@@ -5,6 +5,7 @@ namespace: accounts
 
 resources:
   - ../../base
+  - accounts-hpa.yaml
   - accounts-ingress.yaml
   - postgres-sealedsecret.yaml
   - accounts-servicemonitor.yaml
@@ -16,4 +17,4 @@ patches:
 
 images:
   - name: ghcr.io/jeremyrc760/devops-capstone-project
-    newTag: sha-e581d28
+    newTag: sha-c62e611

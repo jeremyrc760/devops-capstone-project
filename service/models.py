@@ -64,8 +64,12 @@ class PersistentBase:
         cls.app = app
         # This is where we initialize SQLAlchemy from the Flask app
         db.init_app(app)
-        app.app_context().push()
-        db.create_all()  # make our sqlalchemy tables
+        # Create tables in a temporary application context. Leaving this context
+        # pushed would keep one database session alive across every request.
+        # A PostgreSQL restart could then leave that session in a failed
+        # transaction and prevent it from reconnecting.
+        with app.app_context():
+            db.create_all()  # make our sqlalchemy tables
 
     @classmethod
     def all(cls):

@@ -44,6 +44,8 @@ class TestAccountService(TestCase):
 
     def setUp(self):
         """Runs before each test"""
+        self.app_context = app.app_context()
+        self.app_context.push()
         db.session.query(Account).delete()  # clean up the last tests
         db.session.commit()
 
@@ -52,6 +54,7 @@ class TestAccountService(TestCase):
     def tearDown(self):
         """Runs once after each test case"""
         db.session.remove()
+        self.app_context.pop()
 
     ######################################################################
     #  H E L P E R   M E T H O D S

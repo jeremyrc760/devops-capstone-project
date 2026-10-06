@@ -465,6 +465,10 @@ The project currently demonstrates:
 
 Potential next steps:
 
+- Move Kubernetes nodes to private subnets and remove direct public SSH access.
+  A small bastion host or AWS Systems Manager Session Manager would become the
+  administrative entry point, while only the public load balancer / Ingress
+  endpoint remains internet-facing.
 - Move PostgreSQL from in-cluster `Deployment` to AWS RDS PostgreSQL
 - Add PostgreSQL backups and test database recovery
 - Manage AWS infrastructure with Terraform
@@ -473,6 +477,43 @@ Potential next steps:
 - Add structured application logs and centralized log collection
 - Add a frontend client for the Account API
 - Add production and development Argo CD Applications using separate overlays
+
+### Future Private-Network Topology
+
+The current lab prioritizes direct administration and uses public access for
+the EC2 nodes. A production-oriented evolution would isolate the Kubernetes
+nodes in private subnets and expose only the application entry point:
+
+```mermaid
+flowchart TB
+    internet[Internet]
+    admin[Administrator]
+    nlb[Public Network Load Balancer\nHTTPS application traffic]
+    bastion[Bastion Host or AWS SSM\nAdministrative access]
+
+    subgraph vpc[AWS VPC]
+        subgraph public[Public subnet]
+            nlb
+            bastion
+        end
+
+        subgraph private[Private subnets]
+            control[Control Plane]
+            worker1[Worker 1]
+            worker2[Worker 2]
+            monitoring[Monitoring Node]
+        end
+    end
+
+    internet --> nlb
+    admin --> bastion
+    bastion --> control
+    bastion --> worker1
+    bastion --> worker2
+    bastion --> monitoring
+    nlb --> worker1
+    nlb --> worker2
+```
 
 ## License
 
